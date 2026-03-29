@@ -371,8 +371,8 @@ export default function App() {
       setMyNickLocal(joinNick.trim());
       setRoomCode(joinInput);
       setRole('player');
-      setGameScreen('attack');
-      notify('✅ انضممت للعبة!', 'success');
+      setGameScreen('waiting');
+      notify('✅ انضممت للعبة! انتظر المشرف', 'success');
     } catch(e) {
       setJoinErr('خطأ في الاتصال — تحقق من الإنترنت');
     }
@@ -519,6 +519,44 @@ export default function App() {
         {['🎭 اختر لقباً لا يمت بصلة لاهتماماتك','⚔️ الكل يهاجم في نفس الوقت — سرية تامة','🔓 النتائج تنكشف للجميع في لحظة واحدة','⏰ الوقت يحدده المشرف ويمكن تمديده','❌ جولتان بلا هجوم = خروج صامت بلا كشف لقبك','🚫 التعاون ممنوع — عقوبته الإخراج الفوري','👁️ الألقاب لا تُكشف كاملةً إلا في نهاية المسابقة'].map((r,i)=>(
           <div key={i} style={{padding:'7px 11px',marginBottom:4,background:'#0f0f22',borderRadius:8,fontSize:12,color:'var(--muted)',border:'1px solid rgba(255,255,255,.04)'}}>{r}</div>
         ))}
+      </div>
+    );
+
+
+    /* ── WAITING (player joined, waiting for admin to start) ── */
+    if(gameScreen==='waiting') return(
+      <div className="scr">
+        <div style={{textAlign:'center',padding:'40px 20px 20px'}}>
+          <div style={{fontSize:64,marginBottom:12}}>⏳</div>
+          <div className="ptitle">في انتظار المشرف</div>
+          <div className="psub">
+            انضممت للغرفة بنجاح!<br/>
+            انتظر حتى يبدأ المشرف اللعبة
+          </div>
+        </div>
+        <div className="card" style={{textAlign:'center'}}>
+          <div style={{fontSize:13,color:'var(--muted)',marginBottom:8}}>رمز الغرفة</div>
+          <div className="room-code-big" style={{fontSize:28,letterSpacing:6}}>{roomCode}</div>
+          <div style={{fontSize:12,color:'var(--muted)',marginTop:8}}>
+            <span className="online-dot"/> {activePlayers.length} لاعب في الغرفة الآن
+          </div>
+        </div>
+        <div className="card">
+          <div className="ctitle">👤 معلوماتك</div>
+          <div style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0'}}>
+            <div style={{width:40,height:40,borderRadius:'50%',background:'linear-gradient(135deg,var(--gold),#ff8c00)',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900,color:'#07070f',fontSize:15}}>{mkI(joinName)}</div>
+            <div>
+              <div style={{fontWeight:700,fontSize:14}}>{joinName}</div>
+              <div style={{fontSize:12,color:'var(--muted)',marginTop:2}}>لقبك: <span style={{color:'var(--gold)',fontWeight:700}}>مخفي 🔒</span></div>
+            </div>
+          </div>
+          <div style={{fontSize:11,color:'var(--muted)',marginTop:8,padding:'8px 10px',background:'rgba(240,192,64,.06)',borderRadius:8,border:'1px solid rgba(240,192,64,.15)'}}>
+            💡 لقبك لن يظهر لأحد حتى تبدأ اللعبة
+          </div>
+        </div>
+        <div style={{textAlign:'center',color:'var(--muted)',fontSize:12,marginTop:8}}>
+          الصفحة تتحدث تلقائياً عند بدء اللعبة 🔄
+        </div>
       </div>
     );
 
