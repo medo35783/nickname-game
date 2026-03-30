@@ -181,6 +181,40 @@ textarea.inp{resize:vertical;min-height:80px}
 .flex{display:flex}.ic{align-items:center}.jb{justify-content:space-between}
 .mt2{margin-top:8px}.mt3{margin-top:12px}.mb2{margin-bottom:8px}
 .muted{color:var(--muted)}.bold{font-weight:700}
+
+/* ── FLIP CARD ── */
+.flip-scene{perspective:700px;width:100%;margin-bottom:10px}
+.flip-card{width:100%;height:140px;position:relative;transform-style:preserve-3d;transition:transform .8s cubic-bezier(.4,0,.2,1)}
+.flip-card.flipped{transform:rotateY(180deg)}
+.flip-front,.flip-back{position:absolute;inset:0;backface-visibility:hidden;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px}
+.flip-front{background:linear-gradient(135deg,#1a1a30,#0f0f22);border:2px solid var(--border)}
+.flip-back{background:linear-gradient(135deg,rgba(230,57,80,.18),rgba(100,0,20,.1));border:2px solid var(--red);transform:rotateY(180deg)}
+
+/* ── CINEMATIC EXIT ── */
+.exit-screen{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.95);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;animation:fadeInFull .4s ease}
+@keyframes fadeInFull{from{opacity:0}to{opacity:1}}
+.exit-icon{font-size:64px;animation:exitPop .6s ease .2s both}
+@keyframes exitPop{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
+.exit-title{font-family:'Cairo',sans-serif;font-size:26px;font-weight:900;color:var(--red);margin-top:12px;animation:slideUp .5s ease .4s both}
+.exit-nick{font-family:'Cairo',sans-serif;font-size:20px;color:var(--gold);margin-top:6px;animation:slideUp .5s ease .6s both}
+.exit-name{font-size:15px;color:var(--text);margin-top:4px;animation:slideUp .5s ease .7s both}
+.exit-killer{font-size:13px;color:var(--muted);margin-top:8px;animation:slideUp .5s ease .8s both}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+/* ── LEADERBOARD ── */
+.lb-row{display:flex;align-items:center;gap:9px;padding:10px 12px;background:#09091e;border-radius:9px;margin-bottom:5px;border-right:3px solid transparent}
+.lb-1{border-color:var(--gold);background:rgba(240,192,64,.06)}
+.lb-2{border-color:rgba(200,200,220,.4)}
+.lb-3{border-color:rgba(230,57,80,.4)}
+.lb-rank{font-family:'Cairo',sans-serif;font-size:18px;font-weight:900;width:28px;text-align:center}
+
+/* ── POISON ── */
+.poison-badge{background:rgba(155,89,182,.15);border:1px solid rgba(155,89,182,.4);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--purple);display:flex;align-items:center;gap:7px;margin-bottom:10px}
+.nt.poisoned{border-color:rgba(155,89,182,.6)!important;background:rgba(155,89,182,.08)!important}
+.nt.poisoned::after{content:'☠️';position:absolute;top:2px;right:3px;font-size:10px}
+
+/* ── SILENT ROUND ── */
+.silent-badge{background:rgba(79,163,224,.08);border:1px solid rgba(79,163,224,.3);border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:8px;margin-bottom:11px;font-size:12px;color:var(--blue)}
 `;
 
 /* ══ HELPERS ══ */
@@ -246,9 +280,18 @@ export default function App() {
   const [notifs, setNotifs]      = useState([]);
   const [modal, setModal]        = useState(null);
   const [statsTab, setStatsTab]  = useState('round');
+  const [heatmapView, setHeatmapView] = useState('nicks'); // 'nicks' | 'names'
   const [suggForm, setSuggForm]  = useState({cat:'لعبة', text:''});
   const [suggestions]            = useState([{id:1,cat:'تصميم',text:'وضع داكن أكثر',date:'2025-03-10'},{id:2,cat:'لعبة',text:'مؤقت صوتي عند النهاية',date:'2025-03-12'}]);
   const [countdown, setCountdown] = useState(null);
+
+  /* ── SPECIAL GAME MODES ── */
+  const [poisonNick, setPoisonNick]     = useState('');   // admin sets poison nick
+  const [silentRound, setSilentRound]   = useState(false); // current round is silent
+  const [pendingSilent, setPendingSilent] = useState(null); // stored silent round data
+  const [exitAnnounce, setExitAnnounce] = useState(null);  // cinematic exit {nick,name,eliminatedBy}
+  const [flipCards, setFlipCards]       = useState({});    // {nick: flipped bool}
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
 
   /* ── REFS ── */
   const listenersRef = useRef([]);
@@ -299,7 +342,13 @@ export default function App() {
       if(rem<=0){
         setCountdown(0);
         if(phase==='attacking' && role==='admin') doReveal();
-      } else setCountdown(rem);
+      } else {
+        setCountdown(rem);
+        // Countdown sounds
+        const secs = Math.floor(rem/1000);
+        if(secs<=3 && secs>0) playSound('countdown_last');
+        else if(secs<=10 && secs>3) playSound('countdown');
+      }
     };
     tick();
     const t = setInterval(tick, 500);
@@ -311,8 +360,59 @@ export default function App() {
     if(!gameState) return;
     if(phase==='attacking')   { setGameScreen('attack'); setMyNick(null); setMyGuess(null); setMySubmitted(false); setProxyFor(null); }
     if(phase==='revealing')   setGameScreen('results');
-    if(phase==='ended')       setGameScreen('winner');
+    if(phase==='ended')       { setGameScreen('winner'); setTimeout(()=>playSound('applause'),500); setTimeout(()=>playSound('applause'),1400); }
   },[phase]);
+
+  /* ══ AUDIO ENGINE (Web Audio API — no files needed) ══ */
+  const playSound = (type) => {
+    try {
+      const ctx = new (window.AudioContext||window.webkitAudioContext)();
+      const play = (freq, dur, vol=0.3, wave='sine', delay=0) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.type = wave; o.frequency.value = freq;
+        g.gain.setValueAtTime(0, ctx.currentTime+delay);
+        g.gain.linearRampToValueAtTime(vol, ctx.currentTime+delay+0.02);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+delay+dur);
+        o.start(ctx.currentTime+delay);
+        o.stop(ctx.currentTime+delay+dur+0.05);
+      };
+      if(type==='countdown') {
+        // تك تك تنازلي — نبضة واحدة حادة
+        play(880, 0.08, 0.25, 'square');
+      } else if(type==='countdown_last') {
+        // آخر 3 ثواني — أقوى وأعلى
+        play(1100, 0.12, 0.4, 'square');
+      } else if(type==='suspense') {
+        // ترقب — نغمات متصاعدة
+        [200,240,280,320,380].forEach((f,i)=>play(f,0.3,0.15,'sine',i*0.18));
+        play(500,0.8,0.2,'sine',1.0);
+      } else if(type==='explosion') {
+        // انفجار كشف — ضربة + رنين
+        play(150,0.15,0.5,'sawtooth');
+        play(300,0.3,0.3,'square',0.05);
+        play(600,0.4,0.2,'sine',0.1);
+        play(900,0.5,0.15,'sine',0.2);
+      } else if(type==='applause') {
+        // تصفيق — نويز متقطع
+        for(let i=0;i<12;i++){
+          const o=ctx.createOscillator(),g=ctx.createGain(),bf=ctx.createBiquadFilter();
+          o.type='sawtooth'; o.frequency.value=80+Math.random()*200;
+          bf.type='bandpass'; bf.frequency.value=1000+Math.random()*2000; bf.Q.value=0.5;
+          o.connect(bf); bf.connect(g); g.connect(ctx.destination);
+          const t=ctx.currentTime+i*0.08;
+          g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.15,t+0.02);
+          g.gain.exponentialRampToValueAtTime(0.001,t+0.12);
+          o.start(t); o.stop(t+0.15);
+        }
+      } else if(type==='poison_hit') {
+        // ضربة مسمومة
+        play(200,0.2,0.4,'sawtooth');
+        play(100,0.4,0.3,'sine',0.1);
+      }
+    } catch(e) {}
+  };
 
   /* ══ HELPERS ══ */
   const notify=(text,type='info')=>{const id=Date.now()+Math.random();setNotifs(p=>[...p,{id,text,type}]);setTimeout(()=>setNotifs(p=>p.filter(n=>n.id!==id)),3200);};
@@ -321,12 +421,17 @@ export default function App() {
 
   /* ══ ADMIN: CREATE ROOM ══ */
   const createRoom = async () => {
+    // Clear any old session so players aren't stuck in old room
+    localStorage.removeItem('ng_session');
+    localStorage.removeItem('ng_admin_session');
     const code = genCode();
     setRoomCode(code);
     await set(roomRef(code), {
       game: { phase:'lobby', roundNum:0, createdAt: Date.now() },
       players: {},
     });
+    // Save admin session
+    localStorage.setItem('ng_admin_session', JSON.stringify({ roomCode: code }));
     setRole('admin');
     setGameScreen('admin');
     notify(`✅ الغرفة جاهزة: ${code}`, 'gold');
@@ -407,7 +512,8 @@ export default function App() {
       setMyNickLocal(joinNick.trim());
       setRoomCode(joinInput);
       setRole('player');
-      // Save to localStorage
+      // Clear old sessions and save new
+      localStorage.removeItem('ng_admin_session');
       localStorage.setItem('ng_session', JSON.stringify({
         roomCode: joinInput, name: joinName.trim(), nick: joinNick.trim(), playerId: newRef.key
       }));
@@ -422,6 +528,28 @@ export default function App() {
   /* ══ AUTO-REJOIN from localStorage ══ */
   const checkAutoRejoin = async () => {
     try {
+      // Check admin session first
+      const adminSaved = localStorage.getItem('ng_admin_session');
+      if(adminSaved) {
+        const adminSession = JSON.parse(adminSaved);
+        const snap = await get(roomRef(adminSession.roomCode));
+        if(snap.exists()) {
+          const data = snap.val();
+          const phase = data.game?.phase || 'lobby';
+          setRoomCode(adminSession.roomCode);
+          setRole('admin');
+          if(phase==='lobby') setGameScreen('admin');
+          else if(phase==='attacking') setGameScreen('attack');
+          else if(phase==='revealing') setGameScreen('results');
+          else if(phase==='ended') setGameScreen('winner');
+          setIsLoading(false);
+          notify('✅ رجعت للغرفة كمشرف', 'gold');
+          return;
+        } else {
+          localStorage.removeItem('ng_admin_session');
+        }
+      }
+      // Check player session
       const saved = localStorage.getItem('ng_session');
       if(!saved) { setIsLoading(false); return; }
       const session = JSON.parse(saved);
@@ -511,14 +639,28 @@ export default function App() {
   };
 
   const processReveal = async (currentAttacks) => {
+    // Play suspense sound
+    playSound('suspense');
+
+    // Check if poison nick was attacked incorrectly
+    if(poisonNick) {
+      const poisonAttacks = currentAttacks.filter(a=>a.targetNick===poisonNick&&!a.correct);
+      if(poisonAttacks.length>0) {
+        setTimeout(()=>{ playSound('poison_hit'); notify(`☠️ ${poisonAttacks.length} لاعب أصاب اللقب المسموم — خسروا جولة هجوم!`,'info'); },600);
+      }
+    }
+
     const elimIds = new Set(currentAttacks.filter(a=>a.correct).map(a=>a.realOwnerId));
     const updates = {};
+    const exitList = []; // for cinematic exits
+
     for(const p of playersList){
       if(elimIds.has(p.id)){
         const who = currentAttacks.find(a=>a.realOwnerId===p.id&&a.correct);
         updates[`rooms/${roomCode}/players/${p.id}/status`]='eliminated';
         updates[`rooms/${roomCode}/players/${p.id}/eliminatedBy`]=who?.attackerNick||'لاعب';
         updates[`rooms/${roomCode}/players/${p.id}/eliminatedRound`]=roundNum;
+        exitList.push({nick:p.nick, name:p.name, eliminatedBy:who?.attackerNick||'لاعب', initials:p.initials, colorIdx:p.colorIdx});
       } else if(p.status==='active'){
         const submitted = currentAttacks.some(a=>a.attackerNick===p.nick);
         const nm = submitted ? 0 : (p.missedRounds||0)+1;
@@ -526,19 +668,44 @@ export default function App() {
         if(nm>=2){
           updates[`rooms/${roomCode}/players/${p.id}/status`]='inactive';
           updates[`rooms/${roomCode}/players/${p.id}/eliminatedRound`]=roundNum;
+          exitList.push({nick:p.nick, name:p.name, eliminatedBy:'الخمول', initials:p.initials, colorIdx:p.colorIdx, inactive:true});
         }
       }
     }
-    // save round to history
+
+    // Handle silent round — store data, don't reveal yet
+    if(silentRound){
+      const roundKey = `round_${roundNum}`;
+      updates[`rooms/${roomCode}/rounds/${roundKey}`]={ round:roundNum, attacks:attacks||{}, endedAt:Date.now(), silent:true };
+      updates[`rooms/${roomCode}/game/phase`]='attacking'; // stay in attacking!
+      updates[`rooms/${roomCode}/game/silentPending`]={ exitList, roundNum };
+      await update(ref(db), updates);
+      setSilentRound(false);
+      notify('🤫 جولة الصمت — النتائج محفوظة حتى تقرر الكشف','info');
+      return;
+    }
+
+    // Save round to history
     const roundKey = `round_${roundNum}`;
-    updates[`rooms/${roomCode}/rounds/${roundKey}`]={
-      round: roundNum,
-      attacks: attacks||{},
-      endedAt: Date.now(),
-    };
-    // change phase
+    updates[`rooms/${roomCode}/rounds/${roundKey}`]={ round:roundNum, attacks:attacks||{}, endedAt:Date.now() };
     updates[`rooms/${roomCode}/game/phase`]='revealing';
     await update(ref(db), updates);
+
+    // Show cinematic exits one by one with sound
+    if(exitList.length>0){
+      exitList.forEach((ex,i)=>{
+        setTimeout(()=>{
+          playSound('explosion');
+          setExitAnnounce(ex);
+          setTimeout(()=>setExitAnnounce(null), 3000);
+        }, i*3200);
+      });
+    }
+
+    // Init flip cards
+    const fc = {};
+    currentAttacks.filter(a=>a.correct).forEach(a=>{ fc[a.targetNick]=false; });
+    setFlipCards(fc);
   };
 
   /* ══ ADMIN: NEXT ROUND ══ */
@@ -553,7 +720,7 @@ export default function App() {
     await update(gameRef(roomCode),{deadline:(deadline||Date.now())+ms});
     notify(`⏱️ تمديد ${fmtMs(ms)}`,'gold');
   };
-  const endGame = async () => { await update(gameRef(roomCode),{phase:'ended'}); localStorage.removeItem('ng_session'); };
+  const endGame = async () => { await update(gameRef(roomCode),{phase:'ended'}); localStorage.removeItem('ng_session'); localStorage.removeItem('ng_admin_session'); };
   const elimCheat = async (pid) => {
     const p = playersList.find(pl=>pl.id===pid);
     await update(ref(db,`rooms/${roomCode}/players/${pid}`),{status:'cheater',eliminatedRound:roundNum,eliminatedBy:'المشرف'});
@@ -573,6 +740,17 @@ export default function App() {
   /* ════════════════════════════════════════════════
      RENDER
   ════════════════════════════════════════════════ */
+
+  /* ── LEADERBOARD DATA ── */
+  const getLeaderboard = () => {
+    return playersList.map(p=>{
+      const atks=allAttacksFlat.filter(a=>a.attackerNick===p.nick);
+      const hits=atks.filter(a=>a.correct);
+      const targeted=allAttacksFlat.filter(a=>a.realOwnerId===p.id).length;
+      return { id:p.id, initials:p.initials, colorIdx:p.colorIdx, status:p.status,
+               attacks:atks.length, hits:hits.length, targeted, score:hits.length*3+atks.length };
+    }).sort((a,b)=>b.score-a.score);
+  };
 
   const renderGame = () => {
 
@@ -721,6 +899,33 @@ export default function App() {
 
       return(
         <div className="scr">
+          {/* Stats + Leaderboard quick access */}
+          <div style={{display:'flex',gap:6,marginBottom:10}}>
+            <div style={{flex:1,background:'var(--card2)',border:'1px solid var(--border)',borderRadius:9,padding:'8px 12px',fontSize:11,color:'var(--muted)',display:'flex',alignItems:'center',gap:6}}>
+              <span style={{fontSize:14}}>⚔️</span>
+              <span>الجولة <strong style={{color:'var(--gold)'}}>{roundNum}</strong></span>
+              <span style={{marginRight:'auto'}}>نشطون: <strong style={{color:'var(--green)'}}>{activePlayers.length}</strong></span>
+            </div>
+            <button className="btn bgh bsm" style={{borderRadius:9,padding:'8px 10px'}} onClick={()=>setShowLeaderboard(true)}>🏆</button>
+            <button className="btn bgh bsm" style={{borderRadius:9,padding:'8px 10px'}} onClick={()=>setGameScreen('stats')}>📊</button>
+          </div>
+
+          {/* Silent round banner */}
+          {silentRound&&(
+            <div className="silent-badge">
+              <span style={{fontSize:16}}>🤫</span>
+              <span><strong>جولة الصمت</strong> — النتائج لن تُكشف حتى يقرر المشرف</span>
+            </div>
+          )}
+
+          {/* Poison nick banner */}
+          {poisonNick&&(
+            <div className="poison-badge">
+              <span style={{fontSize:16}}>☠️</span>
+              <span>يوجد <strong>لقب مسموم</strong> — إذا هاجمته وأخطأت تخسر جولة هجوم!</span>
+            </div>
+          )}
+
           {/* Timer */}
           <div className={`tbar${cdi.urgent?' urg':''}`}>
             <div style={{fontSize:20}}>{cdi.urgent?'🔴':'⏱️'}</div>
@@ -864,8 +1069,21 @@ export default function App() {
           <button className="btn bg" style={{flex:1}} onClick={()=>extendTime(30*60*1000)}>+30د</button>
           <button className="btn bg" style={{flex:1}} onClick={()=>extendTime(60*60*1000)}>+ساعة</button>
         </div>
-        <button className="btn bv" style={{marginBottom:8}} onClick={doReveal}>🔓 كشف النتائج الآن</button>
-        <button className="btn br" style={{marginBottom:8}} onClick={()=>setModal({type:'confirm_end'})}>🛑 إنهاء المسابقة</button>
+        {/* كشف نتائج الجولة */}
+        <button className="btn bv" style={{marginBottom:8}} onClick={doReveal}>
+          🔓 كشف نتائج الجولة {roundNum}
+        </button>
+
+        {/* فاصل واضح */}
+        <div style={{margin:'4px 0 10px',padding:'8px 12px',background:'rgba(255,255,255,.04)',borderRadius:8,fontSize:11,color:'var(--muted)',textAlign:'center',border:'1px dashed rgba(255,255,255,.1)'}}>
+          ─── الخيارات أدناه تنهي المسابقة كاملاً ───
+        </div>
+
+        {/* إنهاء المسابقة — مختلف تماماً */}
+        <button className="btn bgh" style={{marginBottom:8,border:'1px solid var(--red)',color:'var(--red)'}}
+          onClick={()=>setModal({type:'confirm_end'})}>
+          🛑 إنهاء المسابقة كاملاً
+        </button>
 
         {/* حالة الإرسال + هجوم بالنيابة */}
         <div className="card">
@@ -887,6 +1105,56 @@ export default function App() {
               </div>
             );
           })}
+        </div>
+
+        {/* ══ أدوات المشرف الخاصة ══ */}
+        <div className="card">
+          <div className="ctitle">⚗️ أدوات الإثارة</div>
+
+          {/* اللقب المسموم */}
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:12,color:'var(--purple)',fontWeight:700,marginBottom:6}}>☠️ اللقب المسموم</div>
+            <div style={{fontSize:11,color:'var(--muted)',marginBottom:6}}>من يهاجمه ويخطئ يخسر جولة هجوم</div>
+            <div style={{display:'flex',gap:6}}>
+              <select className="inp" style={{flex:1,fontSize:12}} value={poisonNick} onChange={e=>setPoisonNick(e.target.value)}>
+                <option value="">بدون لقب مسموم</option>
+                {playersList.filter(p=>p.status==='active').flatMap(p=>[p.nick,p.nick2].filter(Boolean)).map(n=>(
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+              {poisonNick&&<button className="btn bgh bxs" onClick={()=>setPoisonNick('')}>✕</button>}
+            </div>
+          </div>
+
+          {/* جولة الصمت */}
+          <div style={{borderTop:'1px solid rgba(255,255,255,.06)',paddingTop:10}}>
+            <div style={{fontSize:12,color:'var(--blue)',fontWeight:700,marginBottom:6}}>🤫 جولة الصمت</div>
+            <div style={{fontSize:11,color:'var(--muted)',marginBottom:8}}>النتائج تُخزَّن ولا تُكشف حتى تقرر أنت</div>
+            <div style={{display:'flex',gap:6}}>
+              <button className={`btn ${silentRound?'bb':'bgh'} bsm`} style={{flex:1}} onClick={()=>setSilentRound(!silentRound)}>
+                {silentRound?'🤫 الجولة الحالية صامتة — إلغاء؟':'تفعيل جولة الصمت'}
+              </button>
+            </div>
+            {gameState?.silentPending&&(
+              <button className="btn bv bsm mt2" style={{width:'100%'}} onClick={async()=>{
+                const sp=gameState.silentPending;
+                const updates={};
+                sp.exitList?.forEach(ex=>{
+                  const p=playersList.find(pl=>pl.nick===ex.nick);
+                  if(p){
+                    updates[`rooms/${roomCode}/players/${p.id}/status`]=ex.inactive?'inactive':'eliminated';
+                    updates[`rooms/${roomCode}/players/${p.id}/eliminatedRound`]=sp.roundNum;
+                    updates[`rooms/${roomCode}/players/${p.id}/eliminatedBy`]=ex.eliminatedBy;
+                    sp.exitList.forEach(ex2=>{ playSound('explosion'); });
+                  }
+                });
+                updates[`rooms/${roomCode}/game/phase`]='revealing';
+                updates[`rooms/${roomCode}/game/silentPending`]=null;
+                await update(ref(db),updates);
+                notify('🔓 تم كشف نتائج الجولة الصامتة!','gold');
+              }}>🔓 كشف نتائج الجولة الصامتة الآن</button>
+            )}
+          </div>
         </div>
 
         {/* سجل سري */}
@@ -932,20 +1200,35 @@ export default function App() {
           </div>
 
           {correct.length>0&&<div className="card" style={{marginTop:10}}>
-            <div className="ctitle">💥 كُشفت الهويات</div>
-            {correct.map((a,i)=>{const elim=playersList.find(p=>p.id===a.realOwnerId);return(
-              <div key={i} className="ann ar" style={{marginBottom:8,padding:'11px 13px',textAlign:'right'}}>
-                <div style={{display:'flex',alignItems:'center',gap:9}}>
-                  <Av p={{...elim,status:'eliminated'}} sz={32} fs={11}/>
-                  <div style={{flex:1}}>
-                    <div style={{fontWeight:700,fontSize:14}}>تم كشف "<span style={{color:'var(--gold)'}}>{elim?.nick}</span>"!</div>
-                    <div style={{fontSize:12,color:'var(--text)',marginTop:2}}>الشخص خلف اللقب: <strong>{elim?.name}</strong></div>
-                    <div style={{fontSize:11,color:'var(--muted)',marginTop:1}}>أخرجه: <span style={{color:'var(--gold)'}}>{a.attackerNick}</span> — ج{roundNum}</div>
+            <div className="ctitle">💥 كُشفت الهويات — اضغط البطاقة للكشف</div>
+            {correct.map((a,i)=>{
+              const elim=playersList.find(p=>p.id===a.realOwnerId);
+              const flipped=flipCards[a.targetNick]||false;
+              return(
+                <div key={i} className="flip-scene" onClick={()=>{
+                  if(!flipped){ playSound('explosion'); }
+                  setFlipCards(prev=>({...prev,[a.targetNick]:!prev[a.targetNick]}));
+                }}>
+                  <div className={`flip-card${flipped?' flipped':''}`}>
+                    {/* FRONT — mystery */}
+                    <div className="flip-front">
+                      <div style={{fontSize:36,marginBottom:8}}>🎭</div>
+                      <div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:'var(--gold)'}}>"{a.targetNick}"</div>
+                      <div style={{fontSize:11,color:'var(--muted)',marginTop:6}}>اضغط لكشف الهوية 👆</div>
+                    </div>
+                    {/* BACK — reveal */}
+                    <div className="flip-back">
+                      <Av p={{...elim,status:'eliminated'}} sz={44} fs={16}/>
+                      <div style={{fontFamily:'Cairo',fontSize:16,fontWeight:900,color:'var(--gold)',marginTop:8}}>"{a.targetNick}"</div>
+                      <div style={{fontSize:14,color:'var(--text)',marginTop:4}}>{elim?.name}</div>
+                      <div style={{fontSize:11,color:'var(--muted)',marginTop:6}}>
+                        🗡️ سنارة: <span style={{color:'var(--gold)'}}>{a.attackerNick}</span>
+                      </div>
+                    </div>
                   </div>
-                  <span className="badge brd">خرج</span>
                 </div>
-              </div>
-            );})}
+              );
+            })}
           </div>}
 
           {Object.keys(nickStats).length>0&&<div className="card">
@@ -958,6 +1241,26 @@ export default function App() {
               </div>
             ))}
           </div>}
+
+          {/* LEADERBOARD after each round */}
+          <div className="card">
+            <div className="ctitle">🏆 لوحة المتصدرين</div>
+            <div style={{fontSize:11,color:'var(--muted)',marginBottom:8}}>الترتيب بدون كشف الأسماء — النقاط: إصابة×3 + هجوم×1</div>
+            {getLeaderboard().slice(0,5).map((p,i)=>(
+              <div key={p.id} className={`lb-row ${i===0?'lb-1':i===1?'lb-2':i===2?'lb-3':''}`}>
+                <div className="lb-rank" style={{color:i===0?'var(--gold)':i===1?'rgba(200,200,220,.8)':i===2?'var(--red)':'var(--muted)'}}>
+                  {i===0?'👑':i===1?'🥈':i===2?'🥉':`${i+1}`}
+                </div>
+                <Av p={p} sz={30} fs={11}/>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:11,color:'var(--muted)'}}>لاعب {i+1} {p.status!=='active'?'(خرج)':''}</div>
+                  <div style={{fontSize:10,color:'var(--muted)',marginTop:1}}>⚔️{p.attacks} 🎯{p.hits} 👁️{p.targeted}</div>
+                </div>
+                <div style={{fontFamily:'Cairo',fontSize:17,fontWeight:900,color:i===0?'var(--gold)':'var(--text)'}}>{p.score}نقطة</div>
+              </div>
+            ))}
+            <button className="btn bgh bsm mt2" style={{fontSize:11}} onClick={()=>setShowLeaderboard(true)}>عرض الكل</button>
+          </div>
 
           <div className="card">
             <div className="ctitle">👥 المتبقون ({activePlayers.length})</div>
@@ -979,82 +1282,169 @@ export default function App() {
     if(gameScreen==='stats') return(
       <div className="scr">
         <button className="btn bgh bsm" style={{width:'auto',marginBottom:12}} onClick={()=>setGameScreen('attack')}>← رجوع</button>
-        <div className="tabs">{[['round','الجولة'],['all','الكل'],['players','اللاعبون']].map(([k,l])=>(
-          <button key={k} className={`tab${statsTab===k?' on':''}`} onClick={()=>setStatsTab(k)}>{l}</button>
+        <div className="tabs">{[['round','الجولة'],['heat','الإثارة'],['all','الكل'],['admin_d','🕵️']].map(([k,l])=>(
+          <button key={k} className={`tab${statsTab===k?' on':''}`}
+            onClick={()=>{if(k==='admin_d'&&role!=='admin'){notify('للمشرف فقط','error');return;}setStatsTab(k);}}>
+            {l}
+          </button>
         ))}</div>
 
+        {/* ══ تبويب الجولة ══ */}
         {statsTab==='round'&&<>
           <div className="sg">
             <div className="sbox"><div className="snum">{attacksList.length}</div><div className="slbl">هجمات الجولة</div></div>
             <div className="sbox"><div className="snum" style={{color:'var(--green)'}}>{attacksList.filter(a=>a.correct).length}</div><div className="slbl">إصابات</div></div>
+            <div className="sbox"><div className="snum" style={{color:'var(--red)'}}>{attacksList.filter(a=>!a.correct).length}</div><div className="slbl">فشل</div></div>
+            <div className="sbox"><div className="snum">{activePlayers.length}</div><div className="slbl">نشطون</div></div>
           </div>
-          {role==='admin'&&attacksList.length>0&&<>
-            <div style={{fontSize:11,color:'var(--gold)',marginBottom:8,fontWeight:700}}>🕵️ التفاصيل — للمشرف فقط</div>
-            {attacksList.map((a,i)=>(
-              <div key={i} style={{padding:'7px 10px',marginBottom:4,background:'#09091e',borderRadius:8,borderRight:`3px solid ${a.correct?'var(--green)':'var(--red)'}`,fontSize:12}}>
-                <div style={{fontWeight:700}}>"{a.attackerNick}" هاجم "{a.targetNick}"</div>
-                <div style={{color:'var(--muted)',marginTop:1}}>خمّن: {a.guessedName} / الحقيقي: {a.realOwnerName} <span style={{color:a.correct?'var(--green)':'var(--red)'}}>{a.correct?'✅':'❌'}</span></div>
-              </div>
-            ))}
-          </>}
-          {role!=='admin'&&<div style={{textAlign:'center',color:'var(--muted)',padding:18,fontSize:12}}>التفاصيل الكاملة للمشرف فقط — ستُكشف في نهاية المسابقة 🔒</div>}
+          <div style={{textAlign:'center',color:'var(--muted)',padding:'14px 0',fontSize:12}}>
+            📊 تفاصيل أكثر في تبويب "الإثارة"
+          </div>
         </>}
 
+        {/* ══ تبويب الإثارة — للجميع، بدون كشف الألقاب/الأسماء معاً ══ */}
+        {statsTab==='heat'&&<>
+          <div className="sg sg3" style={{marginBottom:14}}>
+            <div className="sbox"><div className="snum">{allRoundsList.length}</div><div className="slbl">جولات</div></div>
+            <div className="sbox"><div className="snum">{allAttacksFlat.length}</div><div className="slbl">هجمات</div></div>
+            <div className="sbox"><div className="snum" style={{color:'var(--red)'}}>{elimPlayers.length}</div><div className="slbl">خارجون</div></div>
+          </div>
+
+          {/* مفتاح التبديل بين الألقاب والأسماء */}
+          <div style={{display:'flex',gap:7,marginBottom:14}}>
+            <button className={`btn ${heatmapView==='nicks'?'bg':'bgh'}`} style={{flex:1}}
+              onClick={()=>setHeatmapView('nicks')}>🎭 الألقاب</button>
+            <button className={`btn ${heatmapView==='names'?'bg':'bgh'}`} style={{flex:1}}
+              onClick={()=>setHeatmapView('names')}>👤 الأسماء</button>
+          </div>
+
+          {/* الألقاب من الأكثر للأقل استهدافاً */}
+          {heatmapView==='nicks'&&<>
+            <div style={{fontSize:12,color:'var(--gold)',fontWeight:700,marginBottom:10}}>
+              🎭 الألقاب — من الأكثر للأقل استهدافاً
+            </div>
+            {nickHeatmap().length===0&&<div style={{textAlign:'center',color:'var(--muted)',padding:20,fontSize:12}}>لا بيانات بعد</div>}
+            {nickHeatmap().map(([nick, count], i)=>{
+              const maxCount = nickHeatmap()[0]?.[1] || 1;
+              const pct = Math.round((count/maxCount)*100);
+              const isElim = playersList.find(p=>p.nick===nick||p.nick2===nick)?.status!=='active';
+              return(
+                <div key={nick} style={{marginBottom:8}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8}}>
+                      <div style={{fontFamily:'Cairo',fontSize:13,fontWeight:700,color:i===0?'var(--red)':i===1?'var(--gold)':i===2?'var(--blue)':'var(--text)'}}>
+                        {i+1}. {nick}
+                      </div>
+                      {isElim&&<span className="tag tr" style={{fontSize:9}}>خرج</span>}
+                    </div>
+                    <div style={{fontSize:12,color:'var(--muted)'}}>{count} هجمة</div>
+                  </div>
+                  <div style={{height:6,background:'rgba(255,255,255,.06)',borderRadius:3,overflow:'hidden'}}>
+                    <div style={{height:'100%',width:`${pct}%`,borderRadius:3,background:i===0?'var(--red)':i===1?'var(--gold)':i===2?'var(--blue)':'var(--muted)',transition:'width .4s'}}/>
+                  </div>
+                </div>
+              );
+            })}
+          </>}
+
+          {/* الأسماء من الأكثر للأقل استهدافاً */}
+          {heatmapView==='names'&&<>
+            <div style={{fontSize:12,color:'var(--gold)',fontWeight:700,marginBottom:10}}>
+              👤 الأسماء — من الأكثر للأقل استهدافاً
+            </div>
+            {nameHeatmap().length===0&&<div style={{textAlign:'center',color:'var(--muted)',padding:20,fontSize:12}}>لا بيانات بعد</div>}
+            {nameHeatmap().map(([name, count], i)=>{
+              const maxCount = nameHeatmap()[0]?.[1] || 1;
+              const pct = Math.round((count/maxCount)*100);
+              return(
+                <div key={name} style={{marginBottom:8}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                    <div style={{fontWeight:700,fontSize:13,color:i===0?'var(--red)':i===1?'var(--gold)':i===2?'var(--blue)':'var(--text)'}}>
+                      {i+1}. {name}
+                    </div>
+                    <div style={{fontSize:12,color:'var(--muted)'}}>{count} محاولة</div>
+                  </div>
+                  <div style={{height:6,background:'rgba(255,255,255,.06)',borderRadius:3,overflow:'hidden'}}>
+                    <div style={{height:'100%',width:`${pct}%`,borderRadius:3,background:i===0?'var(--red)':i===1?'var(--gold)':i===2?'var(--blue)':'var(--muted)',transition:'width .4s'}}/>
+                  </div>
+                </div>
+              );
+            })}
+          </>}
+        </>}
+
+        {/* ══ تبويب الكل — ملخص الجولات ══ */}
         {statsTab==='all'&&<>
-          <div className="sg">
+          <div className="sg sg4">
             <div className="sbox"><div className="snum">{allRoundsList.length}</div><div className="slbl">جولات</div></div>
             <div className="sbox"><div className="snum">{allAttacksFlat.length}</div><div className="slbl">هجمات</div></div>
             <div className="sbox"><div className="snum" style={{color:'var(--green)'}}>{allAttacksFlat.filter(a=>a.correct).length}</div><div className="slbl">إصابات</div></div>
             <div className="sbox"><div className="snum" style={{color:'var(--red)'}}>{elimPlayers.length}</div><div className="slbl">خارجون</div></div>
           </div>
-          <div className="sg">
-            {mostHuntedNick()&&<div className="hunted"><div style={{fontSize:10,color:'var(--muted)',marginBottom:2}}>🔥 أكثر لقب مطاردة</div><div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:'var(--gold)'}}>{mostHuntedNick()?.nick}</div><div style={{fontSize:10,color:'var(--muted)'}}>{mostHuntedNick()?.count} هجمة</div></div>}
-            {leastHuntedNick()&&<div className="hunted least"><div style={{fontSize:10,color:'var(--muted)',marginBottom:2}}>🛡️ أقل لقب استهداف</div><div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:'var(--blue)'}}>{leastHuntedNick()?.nick}</div><div style={{fontSize:10,color:'var(--muted)'}}>{leastHuntedNick()?.count} هجمة</div></div>}
-          </div>
           {allRoundsList.map((r,i)=>{
             const ratks=Object.values(r.attacks||{});
+            const correct=ratks.filter(a=>a.correct);
             return(
               <div key={i} className="card">
-                <div className="ctitle">الجولة {r.round}</div>
-                <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:7}}>
-                  <div className="tag tb">{ratks.length} هجمة</div>
-                  <div className="tag tv">{ratks.filter(a=>a.correct).length} إصابة</div>
-                  <div className="tag tr">{ratks.filter(a=>!a.correct).length} فشل</div>
-                </div>
-                {role==='admin'&&ratks.map((a,j)=>(
-                  <div key={j} style={{padding:'5px 9px',marginBottom:3,background:'#09091e',borderRadius:7,borderRight:`2px solid ${a.correct?'var(--green)':'var(--red)'}`,fontSize:11}}>
-                    "{a.attackerNick}" → "{a.targetNick}" | خمّن: {a.guessedName} <span style={{color:a.correct?'var(--green)':'var(--red)'}}>{a.correct?'✅':'❌'}</span>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                  <div style={{fontWeight:700,fontSize:13,color:'var(--gold)'}}>الجولة {r.round}{r.silent?<span className="tag tb" style={{marginRight:6,fontSize:9}}>🤫 صمت</span>:null}</div>
+                  <div style={{display:'flex',gap:5}}>
+                    <div className="tag tb">{ratks.length} هجمة</div>
+                    <div className="tag tv">{correct.length} كشف</div>
                   </div>
-                ))}
+                </div>
+                {/* الخارجون في هذه الجولة */}
+                {correct.map((a,j)=>{
+                  const victim=playersList.find(p=>p.id===a.realOwnerId);
+                  return(
+                    <div key={j} style={{fontSize:12,padding:'6px 10px',background:'rgba(230,57,80,.07)',borderRadius:8,marginBottom:4,borderRight:'2px solid var(--red)',display:'flex',justifyContent:'space-between'}}>
+                      <span>💥 كُشف <strong>"{victim?.nick}"</strong></span>
+                      <span style={{color:'var(--muted)',fontSize:11}}>سنارة: {a.attackerNick}</span>
+                    </div>
+                  );
+                })}
+                {correct.length===0&&<div style={{fontSize:11,color:'var(--muted)'}}>لم يُكشف أحد هذه الجولة</div>}
+              </div>
+            );
+          })}
+          {allRoundsList.length===0&&<div style={{textAlign:'center',color:'var(--muted)',padding:28,fontSize:12}}>لا جولات منتهية بعد</div>}
+        </>}
+
+        {/* ══ تبويب المشرف السري ══ */}
+        {statsTab==='admin_d'&&role==='admin'&&<>
+          <div style={{fontSize:11,color:'var(--gold)',fontWeight:700,marginBottom:10}}>🕵️ سجل كامل — للمشرف فقط</div>
+          {/* إحصائيات كل لاعب */}
+          {playersList.map(p=>{
+            const myAtks=allAttacksFlat.filter(a=>a.attackerNick===p.nick);
+            const myHits=myAtks.filter(a=>a.correct);
+            const tgtd=allAttacksFlat.filter(a=>a.realOwnerId===p.id);
+            const guessed=allAttacksFlat.filter(a=>a.guessedId===p.id);
+            return(
+              <div key={p.id} className="card">
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:9}}>
+                  <Av p={p} sz={33} fs={12}/>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:700,fontSize:13}}>{p.name}</div>
+                    <div style={{fontSize:11,color:'var(--gold)'}}>{p.nick}{p.nick2?` · ${p.nick2}`:''}</div>
+                  </div>
+                  <div>{p.status==='active'?<span className="badge bvd">نشط</span>:p.status==='cheater'?<span className="badge brd">غش</span>:p.status==='inactive'?<span className="badge brd">خمول</span>:<span className="badge brd">خرج ج{p.eliminatedRound}</span>}</div>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:5}}>
+                  {[[myAtks.length,'هجماته','var(--gold)'],[myHits.length,'كشوفاته','var(--green)'],[tgtd.length,'انكشف','var(--red)'],[guessed.length,'استُهدف','var(--blue)']].map(([n,l,col],i)=>(
+                    <div key={i} style={{background:'#09091e',borderRadius:6,padding:'7px 4px',textAlign:'center'}}>
+                      <div style={{fontWeight:900,fontSize:16,color:col,fontFamily:'Cairo'}}>{n}</div>
+                      <div style={{color:'var(--muted)',fontSize:10}}>{l}</div>
+                    </div>
+                  ))}
+                </div>
+                {p.status!=='active'&&<div style={{marginTop:6,fontSize:11,color:'var(--muted)'}}>
+                  {p.eliminatedBy&&<>أخرجه: <span style={{color:'var(--gold)'}}>{p.eliminatedBy}</span> — </>}
+                  {p.eliminatedRound&&`جولة ${p.eliminatedRound}`}
+                </div>}
               </div>
             );
           })}
         </>}
-
-        {statsTab==='players'&&playersList.map(p=>{
-          const myAtks=allAttacksFlat.filter(a=>a.attackerNick===p.nick);
-          const myHits=myAtks.filter(a=>a.correct);
-          const tgtd=allAttacksFlat.filter(a=>a.realOwnerId===p.id);
-          return(
-            <div key={p.id} className="card">
-              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:9}}>
-                <Av p={p} sz={33} fs={12}/>
-                <div style={{flex:1}}><div style={{fontWeight:700,fontSize:13}}>{p.name}</div>
-                  <div style={{fontSize:11,color:role==='admin'?'var(--gold)':'var(--muted)'}}>{role==='admin'?`${p.nick}${p.nick2?` · ${p.nick2}`:''}`:p.status!=='active'?`${p.nick}${p.nick2?` · ${p.nick2}`:''}`:'لقبه مخفي 🔒'}</div>
-                </div>
-                <div>{p.status==='active'?<span className="badge bvd">نشط</span>:p.status==='cheater'?<span className="badge brd">غش</span>:p.status==='inactive'?<span className="badge brd">خمول</span>:<span className="badge brd">خرج ج{p.eliminatedRound}</span>}</div>
-              </div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:5}}>
-                {[[role==='admin'?myAtks.length:'—','هجماته','var(--gold)'],[role==='admin'?myHits.length:'—','إصاباته','var(--green)'],[tgtd.length,'استُهدف','var(--red)']].map(([n,l,c],i)=>(
-                  <div key={i} style={{background:'#09091e',borderRadius:6,padding:'7px 4px',textAlign:'center'}}>
-                    <div style={{fontWeight:900,fontSize:16,color:c,fontFamily:'Cairo'}}>{n}</div>
-                    <div style={{color:'var(--muted)',fontSize:10}}>{l}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })}
       </div>
     );
 
@@ -1286,6 +1676,52 @@ export default function App() {
           <button className="btn bgh" style={{flex:1}} onClick={()=>setModal(null)}>انتظر</button>
         </div>
       </div></div>}
+      {/* ══ CINEMATIC EXIT OVERLAY ══ */}
+      {exitAnnounce&&(
+        <div className="exit-screen" onClick={()=>setExitAnnounce(null)}>
+          <div className="exit-icon">💥</div>
+          <div className="exit-title">كُشفت الهوية!</div>
+          <div className="exit-nick">"{exitAnnounce.nick}"</div>
+          <div className="exit-name">{exitAnnounce.inactive?'خرج بسبب الخمول':`الشخص خلف اللقب: ${exitAnnounce.name}`}</div>
+          {!exitAnnounce.inactive&&<div className="exit-killer">
+            🗡️ أخرجه: <span style={{color:'var(--gold)',fontWeight:700}}>{exitAnnounce.eliminatedBy}</span>
+          </div>}
+          <div style={{marginTop:20,fontSize:11,color:'rgba(255,255,255,.3)'}}>اضغط للإغلاق</div>
+        </div>
+      )}
+
+      {/* ══ LEADERBOARD MODAL ══ */}
+      {showLeaderboard&&(
+        <div className="mbg" onClick={()=>setShowLeaderboard(false)}>
+          <div className="modal" style={{maxWidth:400,textAlign:'right'}} onClick={e=>e.stopPropagation()}>
+            <div style={{textAlign:'center',marginBottom:14}}>
+              <div style={{fontSize:28,marginBottom:4}}>🏆</div>
+              <div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:'var(--gold)'}}>لوحة المتصدرين</div>
+              <div style={{fontSize:11,color:'var(--muted)',marginTop:2}}>الترتيب بدون كشف الأسماء — النقاط: إصابة×3 + هجوم×1</div>
+            </div>
+            <div className="sc" style={{maxHeight:320}}>
+              {getLeaderboard().map((p,i)=>(
+                <div key={p.id} className={`lb-row ${i===0?'lb-1':i===1?'lb-2':i===2?'lb-3':''}`}>
+                  <div className="lb-rank" style={{color:i===0?'var(--gold)':i===1?'rgba(200,200,220,.8)':i===2?'var(--red)':'var(--muted)'}}>
+                    {i===0?'👑':i===1?'🥈':i===2?'🥉':`${i+1}`}
+                  </div>
+                  <Av p={p} sz={32} fs={12}/>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12,color:'var(--muted)'}}>لاعب {i+1}</div>
+                    <div style={{fontSize:10,color:'var(--muted)',marginTop:1}}>
+                      ⚔️{p.attacks} إصابات:{p.hits} استُهدف:{p.targeted}
+                    </div>
+                  </div>
+                  <div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:i===0?'var(--gold)':'var(--text)'}}>{p.score}</div>
+                  {p.status!=='active'&&<span className="tag tr" style={{fontSize:9}}>خرج</span>}
+                </div>
+              ))}
+            </div>
+            <button className="btn bgh mt2" onClick={()=>setShowLeaderboard(false)}>إغلاق</button>
+          </div>
+        </div>
+      )}
+
       {/* ══ TUTORIAL MODAL ══ */}
       {showTutorial&&<div className="mbg" style={{alignItems:'flex-start',paddingTop:20,overflowY:'auto'}}>
         <div className="modal" style={{maxWidth:420,textAlign:'right',padding:22}}>
@@ -1345,11 +1781,25 @@ export default function App() {
       </div>}
 
       {modal?.type==='confirm_end'&&<div className="mbg"><div className="modal">
-        <div className="micn">🛑</div><div className="mtitle" style={{color:'var(--red)'}}>إنهاء المسابقة؟</div>
-        <div className="msub">سيُعلن الفائزون الحاليون.</div>
+        <div className="micn">⚠️</div>
+        <div className="mtitle" style={{color:'var(--red)'}}>إنهاء المسابقة كاملاً؟</div>
+        <div className="msub">
+          هذا سيُنهي المسابقة نهائياً<br/>
+          وسيُعلن الفائزون الحاليون.<br/>
+          <strong style={{color:'var(--red)'}}>لا يمكن التراجع!</strong>
+        </div>
+        <div style={{background:'rgba(230,57,80,.08)',border:'1px solid rgba(230,57,80,.2)',borderRadius:8,padding:'10px',marginBottom:14,fontSize:12,color:'var(--muted)',textAlign:'center'}}>
+          إذا أردت فقط كشف نتائج الجولة الحالية<br/>
+          اضغط <strong style={{color:'var(--green)'}}>رجوع</strong> واستخدم زر<br/>
+          <strong style={{color:'var(--green)'}}>🔓 كشف نتائج الجولة</strong>
+        </div>
         <div style={{display:'flex',gap:8}}>
-          <button className="btn br" style={{flex:1}} onClick={()=>{setModal(null);endGame();}}>إنهاء</button>
-          <button className="btn bgh" style={{flex:1}} onClick={()=>setModal(null)}>إلغاء</button>
+          <button className="btn br" style={{flex:1}} onClick={()=>{setModal(null);endGame();}}>
+            نعم، أنهِ المسابقة
+          </button>
+          <button className="btn bv" style={{flex:1}} onClick={()=>setModal(null)}>
+            ← رجوع
+          </button>
         </div>
       </div></div>}
 
