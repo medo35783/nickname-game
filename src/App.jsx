@@ -182,6 +182,21 @@ textarea.inp{resize:vertical;min-height:80px}
 .mt2{margin-top:8px}.mt3{margin-top:12px}.mb2{margin-bottom:8px}
 .muted{color:var(--muted)}.bold{font-weight:700}
 
+/* ── HOW TO PLAY ── */
+.guide-hero{text-align:center;padding:22px 16px 16px;background:linear-gradient(180deg,rgba(240,192,64,.08),transparent);border-radius:14px;margin-bottom:14px;border:1px solid var(--border)}
+.role-toggle{display:flex;gap:8px;margin-bottom:16px;background:var(--card2);border-radius:12px;padding:4px}
+.role-btn{flex:1;padding:10px;border:none;border-radius:9px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:all .2s;background:transparent;color:var(--muted)}
+.role-btn.active{background:linear-gradient(135deg,var(--gold),#d4920a);color:#07070f;box-shadow:0 2px 10px rgba(240,192,64,.3)}
+.step-card{background:var(--card2);border:1px solid rgba(255,255,255,.07);border-radius:13px;padding:14px;margin-bottom:10px;display:flex;gap:12px;align-items:flex-start}
+.step-num{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Cairo',sans-serif;font-size:14px;font-weight:900;flex-shrink:0;background:linear-gradient(135deg,var(--gold),#d4920a);color:#07070f}
+.step-body{flex:1}
+.step-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px}
+.step-desc{font-size:12px;color:var(--muted);line-height:1.7}
+.step-tip{margin-top:6px;padding:6px 10px;background:rgba(240,192,64,.07);border-radius:7px;font-size:11px;color:var(--gold);border-right:2px solid var(--gold)}
+.rule-row{display:flex;align-items:flex-start;gap:9px;padding:9px 12px;background:var(--card2);border-radius:9px;margin-bottom:6px;font-size:12px;color:var(--muted)}
+.rule-icon{font-size:16px;flex-shrink:0;margin-top:1px}
+.example-box{background:rgba(79,163,224,.07);border:1px solid rgba(79,163,224,.2);border-radius:10px;padding:12px;margin:10px 0;font-size:12px;color:var(--muted);line-height:1.9}
+
 /* ── FLIP CARD ── */
 .flip-scene{perspective:700px;width:100%;margin-bottom:10px}
 .flip-card{width:100%;height:140px;position:relative;transform-style:preserve-3d;transition:transform .8s cubic-bezier(.4,0,.2,1)}
@@ -282,6 +297,7 @@ export default function App() {
   const [statsTab, setStatsTab]  = useState('round');
   const [heatmapView, setHeatmapView] = useState('nicks'); // 'nicks' | 'names'
   const [suggForm, setSuggForm]  = useState({cat:'لعبة', text:''});
+  const [guideRole, setGuideRole] = useState('player'); // 'player' | 'admin'
   const [suggestions]            = useState([{id:1,cat:'تصميم',text:'وضع داكن أكثر',date:'2025-03-10'},{id:2,cat:'لعبة',text:'مؤقت صوتي عند النهاية',date:'2025-03-12'}]);
   const [countdown, setCountdown] = useState(null);
 
@@ -766,6 +782,9 @@ export default function App() {
           <button className="btn bg" onClick={createRoom}>👑 إنشاء غرفة كمسؤول</button>
           <button className="btn bo" onClick={()=>setGameScreen('join')}>🎮 انضمام كلاعب برمز الغرفة</button>
         </div>
+        <button className="btn bgh" style={{marginTop:4}} onClick={()=>setModal({type:'guide'})}>
+          📖 كيف تلعب؟ — دليل للمشرف والمتسابق
+        </button>
         <div className="div">قوانين اللعبة</div>
         {['🎭 اختر لقباً لا يمت بصلة لاهتماماتك','⚔️ الكل يهاجم في نفس الوقت — سرية تامة','🔓 النتائج تنكشف للجميع في لحظة واحدة','⏰ الوقت يحدده المشرف ويمكن تمديده','❌ جولتان بلا هجوم = خروج صامت بلا كشف لقبك','🚫 التعاون ممنوع — عقوبته الإخراج الفوري','👁️ الألقاب لا تُكشف كاملةً إلا في نهاية المسابقة'].map((r,i)=>(
           <div key={i} style={{padding:'7px 11px',marginBottom:4,background:'#0f0f22',borderRadius:8,fontSize:12,color:'var(--muted)',border:'1px solid rgba(255,255,255,.04)'}}>{r}</div>
@@ -1222,7 +1241,7 @@ export default function App() {
                       <div style={{fontFamily:'Cairo',fontSize:16,fontWeight:900,color:'var(--gold)',marginTop:8}}>"{a.targetNick}"</div>
                       <div style={{fontSize:14,color:'var(--text)',marginTop:4}}>{elim?.name}</div>
                       <div style={{fontSize:11,color:'var(--muted)',marginTop:6}}>
-                        🗡️ سنارة: <span style={{color:'var(--gold)'}}>{a.attackerNick}</span>
+                        🗡️ خرج من قبل: <span style={{color:'var(--gold)'}}>{a.attackerNick}</span>
                       </div>
                     </div>
                   </div>
@@ -1643,6 +1662,184 @@ export default function App() {
   );
 
   /* ══ MAIN ══ */
+  /* ══ GUIDE RENDER ══ */
+  const renderGuide=()=>(
+    <div className="scr">
+      {/* Hero */}
+      <div className="guide-hero">
+        <div style={{fontSize:52,marginBottom:8}}>🎭</div>
+        <div style={{fontFamily:'Cairo',fontSize:22,fontWeight:900,background:'linear-gradient(135deg,var(--gold),#ff8c00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>
+          دليل لعبة الألقاب
+        </div>
+        <div style={{fontSize:12,color:'var(--muted)',marginTop:5,lineHeight:1.7}}>
+          لعبة اجتماعية تعتمد على التخفي والتحليل<br/>
+          اختر لقبك — هاجم — اكشف — وابقَ!
+        </div>
+      </div>
+
+      {/* Role toggle */}
+      <div className="role-toggle">
+        <button className={`role-btn ${guideRole==='player'?'active':''}`} onClick={()=>setGuideRole('player')}>
+          🎮 أنا متسابق
+        </button>
+        <button className={`role-btn ${guideRole==='admin'?'active':''}`} onClick={()=>setGuideRole('admin')}>
+          👑 أنا المشرف
+        </button>
+      </div>
+
+      {/* ══ دليل المتسابق ══ */}
+      {guideRole==='player'&&<>
+        <div style={{fontSize:13,color:'var(--gold)',fontWeight:700,marginBottom:10}}>خطواتك كمتسابق</div>
+
+        <div className="step-card">
+          <div className="step-num">1</div>
+          <div className="step-body">
+            <div className="step-title">ادخل رمز الغرفة وسجّل بياناتك</div>
+            <div className="step-desc">المشرف يرسل لك رمزاً من 6 أرقام. أدخله ثم اكتب اسمك الكامل ولقبك السري.</div>
+            <div className="step-tip">💡 اختر لقباً لا يمت بصلة لاهتماماتك — "القناص" لمن لا يصطاد مثلاً!</div>
+          </div>
+        </div>
+
+        <div className="step-card">
+          <div className="step-num">2</div>
+          <div className="step-body">
+            <div className="step-title">انتظر في غرفة الانتظار</div>
+            <div className="step-desc">بعد انضمامك ستنتظر حتى يبدأ المشرف اللعبة. لقبك مخفي عن الجميع تماماً.</div>
+          </div>
+        </div>
+
+        <div className="step-card">
+          <div className="step-num">3</div>
+          <div className="step-body">
+            <div className="step-title">شاشة الهجوم — هاجم في الوقت المحدد</div>
+            <div className="step-desc">ستظهر لك لوحتان في نفس الصفحة:</div>
+            <div className="example-box">
+              <strong style={{color:'var(--text)'}}>🎭 لوحة الألقاب</strong><br/>
+              جميع الألقاب في مربعات ملونة<br/>
+              الخارجون مظللون بعلامة ✕<br/><br/>
+              <strong style={{color:'var(--text)'}}>👥 قائمة الأسماء</strong><br/>
+              أسماء المتسابقين النشطين<br/>
+              الخارجون مظللون مع لقبهم
+            </div>
+            <div className="step-tip">① اضغط لقباً تعتقد أنك تعرف صاحبه<br/>② اختر الاسم الذي تخمّنه<br/>③ اضغط "تأكيد الهجوم"</div>
+          </div>
+        </div>
+
+        <div className="step-card">
+          <div className="step-num">4</div>
+          <div className="step-body">
+            <div className="step-title">انتظر الكشف مع الجميع</div>
+            <div className="step-desc">بعد إرسال هجومك ستظهر شاشة انتظار. المشرف يقرر متى تُكشف النتائج — للجميع في نفس اللحظة.</div>
+          </div>
+        </div>
+
+        <div className="step-card">
+          <div className="step-num">5</div>
+          <div className="step-body">
+            <div className="step-title">شاشة النتائج — بطاقات الكشف</div>
+            <div className="step-desc">كل لقب مكشوف يظهر كبطاقة مقلوبة — اضغطها لتكشف الاسم الحقيقي مع صوت درامي!</div>
+          </div>
+        </div>
+
+        <div className="div">القوانين المهمة</div>
+
+        {[
+          ['❌','جولتان بدون هجوم = خروج تلقائي بدون كشف لقبك'],
+          ['🚫','التعاون مع لاعب آخر ممنوع — المشرف يراقب'],
+          ['👁️','ألقابك لا تُكشف كاملةً إلا بعد انتهاء المسابقة'],
+          ['🔄','لو خرجت من الجوال عن طريق الخطأ — أدخل نفس رمز الغرفة والاسم واللقب للرجوع'],
+          ['☠️','انتبه من اللقب المسموم — المشرف قد يختار لقباً خاصاً، إذا هاجمته وأخطأت تخسر جولة'],
+        ].map(([icon,text],i)=>(
+          <div key={i} className="rule-row">
+            <div className="rule-icon">{icon}</div>
+            <div>{text}</div>
+          </div>
+        ))}
+
+        <div style={{background:'rgba(46,204,113,.07)',border:'1px solid rgba(46,204,113,.2)',borderRadius:10,padding:'12px 14px',marginTop:12,fontSize:12,color:'var(--muted)',lineHeight:1.8}}>
+          <strong style={{color:'var(--green)'}}>🏆 كيف تفوز؟</strong><br/>
+          ابقَ آخر لاعب دون أن يُكشف لقبك. كلما أخرجت منافسين أكثر زادت فرصتك!
+        </div>
+      </>}
+
+      {/* ══ دليل المشرف ══ */}
+      {guideRole==='admin'&&<>
+        <div style={{fontSize:13,color:'var(--gold)',fontWeight:700,marginBottom:10}}>مهامك كمشرف اللعبة</div>
+
+        <div className="step-card">
+          <div className="step-num">1</div>
+          <div className="step-body">
+            <div className="step-title">أنشئ الغرفة وأرسل الرمز</div>
+            <div className="step-desc">اضغط "إنشاء غرفة كمسؤول" — ستحصل على رمز 6 أرقام. أرسله للمتسابقين ليدخلوا.</div>
+            <div className="step-tip">يمكنك أيضاً إضافة اللاعبين يدوياً من لوحة الإعداد بدلاً من أن يدخلوا بأنفسهم</div>
+          </div>
+        </div>
+
+        <div className="step-card">
+          <div className="step-num">2</div>
+          <div className="step-body">
+            <div className="step-title">حدّد الإعدادات قبل البدء</div>
+            <div className="step-desc">عدد الألقاب (1 أو 2 لكل لاعب) ومدة كل جولة — من 5 دقائق إلى أيام.</div>
+            <div className="example-box">
+              <strong style={{color:'var(--text)'}}>مثال للوقت:</strong><br/>
+              رحلة عائلية: 2-6 ساعات للجولة<br/>
+              جلسة سريعة: 30-60 دقيقة<br/>
+              مسابقة أيام: 24 ساعة للجولة
+            </div>
+          </div>
+        </div>
+
+        <div className="step-card">
+          <div className="step-num">3</div>
+          <div className="step-body">
+            <div className="step-title">ابدأ اللعبة — الكل ينتقل تلقائياً</div>
+            <div className="step-desc">بعد اكتمال 6 لاعبين على الأقل، اضغط "بدء اللعبة". جميع الأجهزة تنتقل لشاشة الهجوم فوراً.</div>
+          </div>
+        </div>
+
+        <div className="step-card">
+          <div className="step-num">4</div>
+          <div className="step-body">
+            <div className="step-title">راقب من لوحة التحكم 👑</div>
+            <div className="step-desc">اضغط زر "👑 تحكم" لترى:</div>
+            <div className="example-box">
+              ✦ من أرسل هجومه ومن لم يرسل بعد<br/>
+              ✦ سجل الهجمات السري (أنت فقط)<br/>
+              ✦ تمديد الوقت +30د أو +ساعة<br/>
+              ✦ الهجوم بالنيابة عن لاعب (جواله أُغلق)<br/>
+              ✦ إخراج لاعب بسبب الغش
+            </div>
+          </div>
+        </div>
+
+        <div className="step-card">
+          <div className="step-num">5</div>
+          <div className="step-body">
+            <div className="step-title">كشف النتائج — أنت من يقرر</div>
+            <div className="step-desc">لما ترى الحماس مشتداً أو اكتمل الجميع، اضغط "كشف نتائج الجولة". النتائج تظهر للجميع في لحظة واحدة.</div>
+            <div className="step-tip">⚠️ فرّق بين "كشف نتائج الجولة" و"إنهاء المسابقة كاملاً" — الثاني لا يمكن التراجع عنه!</div>
+          </div>
+        </div>
+
+        <div className="div">أدوات الإثارة الخاصة</div>
+
+        {[
+          ['☠️','اللقب المسموم — اختر لقباً سرياً، من يهاجمه ويخطئ يخسر جولة هجوم'],
+          ['🤫','جولة الصمت — النتائج تُخزَّن ولا تُكشف حتى تقرر أنت'],
+          ['🎮','هجوم بالنيابة — إذا لاعب جواله أُغلق، اضغط 🎮 بجانبه وهاجم نيابةً عنه'],
+          ['🚫','إخراج للغش — إذا رأيت تعاوناً مشبوهاً اضغط "غش" بجانب اللاعب'],
+        ].map(([icon,text],i)=>(
+          <div key={i} className="rule-row">
+            <div className="rule-icon">{icon}</div>
+            <div>{text}</div>
+          </div>
+        ))}
+      </>}
+
+      <div style={{height:20}}/>
+    </div>
+  );
+
   const navItems=[{id:'news',icon:'🔔',label:'أخبار',dot:hasNews},{id:'game',icon:'🎭',label:'اللعبة'},{id:'suggest',icon:'💡',label:'اقتراح'},{id:'pricing',icon:'💎',label:'الباقات'}];
 
   /* ── Loading splash ── */
@@ -1779,6 +1976,91 @@ export default function App() {
           </div>
         </div>
       </div>}
+
+      {/* ══ GUIDE MODAL ══ */}
+      {modal?.type==='guide'&&(
+        <div className="mbg" style={{alignItems:'flex-start',paddingTop:16,overflowY:'auto'}}>
+          <div style={{background:'var(--card)',border:'1.5px solid var(--border)',borderRadius:16,padding:20,maxWidth:430,width:'100%',maxHeight:'90vh',overflowY:'auto'}}>
+
+            {/* Header + close */}
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+              <div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:'var(--gold)'}}>📖 دليل لعبة الألقاب</div>
+              <button className="btn bgh bxs" onClick={()=>setModal(null)}>✕</button>
+            </div>
+
+            {/* Role toggle */}
+            <div className="role-toggle" style={{marginBottom:16}}>
+              <button className={`role-btn ${guideRole==='player'?'active':''}`} onClick={()=>setGuideRole('player')}>
+                🎮 أنا متسابق
+              </button>
+              <button className={`role-btn ${guideRole==='admin'?'active':''}`} onClick={()=>setGuideRole('admin')}>
+                👑 أنا المشرف
+              </button>
+            </div>
+
+            {/* ══ متسابق ══ */}
+            {guideRole==='player'&&<>
+              {[
+                {n:1, title:'ادخل رمز الغرفة وسجّل بياناتك', desc:'المشرف يرسل رمزاً من 6 أرقام. أدخله واكتب اسمك ولقبك السري.', tip:'اختر لقباً لا يمت بصلة لاهتماماتك — يجعل كشفك أصعب!'},
+                {n:2, title:'انتظر في غرفة الانتظار', desc:'لقبك مخفي تماماً. انتظر حتى يبدأ المشرف اللعبة — ستنتقل تلقائياً.'},
+                {n:3, title:'شاشة الهجوم', desc:'لوحة الألقاب فوق + قائمة الأسماء تحت. اختر لقباً تعرف صاحبه ثم اختر الاسم واضغط تأكيد.', tip:'الكل يهاجم في نفس الوقت سراً — لا أحد يرى هجومك!'},
+                {n:4, title:'كشف النتائج', desc:'المشرف يقرر متى تُكشف. النتائج تظهر للجميع في نفس اللحظة — اضغط البطاقات لتكشف الهوية!'},
+              ].map(s=>(
+                <div key={s.n} className="step-card" style={{marginBottom:9}}>
+                  <div className="step-num">{s.n}</div>
+                  <div className="step-body">
+                    <div className="step-title">{s.title}</div>
+                    <div className="step-desc">{s.desc}</div>
+                    {s.tip&&<div className="step-tip">💡 {s.tip}</div>}
+                  </div>
+                </div>
+              ))}
+
+              <div style={{marginTop:4,marginBottom:12,fontSize:12,color:'var(--gold)',fontWeight:700}}>⚠️ قوانين مهمة</div>
+              {[
+                ['❌','جولتان بدون هجوم = خروج صامت بدون كشف لقبك'],
+                ['🚫','التعاون ممنوع — المشرف يراقب'],
+                ['🔄','لو خرجت عن طريق الخطأ — أدخل نفس البيانات للرجوع'],
+                ['🏆','الهدف: ابقَ آخر لاعب دون أن يُكشف لقبك'],
+              ].map(([ic,tx],i)=>(
+                <div key={i} className="rule-row">{ic} <span>{tx}</span></div>
+              ))}
+            </>}
+
+            {/* ══ مشرف ══ */}
+            {guideRole==='admin'&&<>
+              {[
+                {n:1, title:'أنشئ الغرفة', desc:'اضغط "إنشاء غرفة كمسؤول". أرسل الرمز الظاهر للمتسابقين أو أضفهم يدوياً.'},
+                {n:2, title:'حدّد الإعدادات', desc:'عدد الألقاب (1 أو 2) ومدة كل جولة. الحد الأدنى 5 دقائق — لا حد أقصى.', tip:'رحلة 3 أيام؟ اجعل كل جولة 2-6 ساعات'},
+                {n:3, title:'ابدأ اللعبة', desc:'بعد 6 لاعبين على الأقل، اضغط "بدء اللعبة". الجميع ينتقلون تلقائياً.'},
+                {n:4, title:'راقب من زر 👑 تحكم', desc:'ترى من أرسل هجومه، السجل السري، وتمديد الوقت والهجوم بالنيابة.'},
+                {n:5, title:'كشف النتائج', desc:'اضغط "كشف نتائج الجولة" متى أردت. النتائج تظهر للجميع معاً.', tip:'⚠️ "إنهاء المسابقة كاملاً" يختلف عن "كشف نتائج الجولة" — الأول لا رجعة فيه!'},
+              ].map(s=>(
+                <div key={s.n} className="step-card" style={{marginBottom:9}}>
+                  <div className="step-num">{s.n}</div>
+                  <div className="step-body">
+                    <div className="step-title">{s.title}</div>
+                    <div className="step-desc">{s.desc}</div>
+                    {s.tip&&<div className="step-tip">💡 {s.tip}</div>}
+                  </div>
+                </div>
+              ))}
+
+              <div style={{marginTop:4,marginBottom:12,fontSize:12,color:'var(--gold)',fontWeight:700}}>🎲 أدوات الإثارة</div>
+              {[
+                ['☠️','اللقب المسموم — من يهاجمه ويخطئ يخسر جولة'],
+                ['🤫','جولة الصمت — النتائج مخفية حتى تقرر أنت'],
+                ['🎮','هجوم بالنيابة — إذا لاعب جواله أُغلق'],
+                ['🚫','إخراج للغش — إذا رأيت تعاوناً مشبوهاً'],
+              ].map(([ic,tx],i)=>(
+                <div key={i} className="rule-row">{ic} <span>{tx}</span></div>
+              ))}
+            </>}
+
+            <button className="btn bg" style={{marginTop:16}} onClick={()=>setModal(null)}>✅ فهمت!</button>
+          </div>
+        </div>
+      )}
 
       {modal?.type==='confirm_end'&&<div className="mbg"><div className="modal">
         <div className="micn">⚠️</div>
