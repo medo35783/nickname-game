@@ -209,6 +209,8 @@ export default function App() {
   /* ── NAV ── */
   const [tab, setTab]           = useState('game');
   const [gameScreen, setGameScreen] = useState('home');
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [isLoading, setIsLoading]   = useState(true);  // splash screen on startup
 
   /* ── SESSION ── */
   const [role, setRole]         = useState(null);     // 'admin' | 'player'
@@ -266,6 +268,9 @@ export default function App() {
   const allAttacksFlat = allRoundsList.flatMap(r=>Object.values(r.attacks||{}));
   const hasNews      = true;
   const SUPPORT_EMAIL= 'support@nickname-game.app';
+
+  /* ══ AUTO-REJOIN on mount ══ */
+  useEffect(()=>{ checkAutoRejoin(); },[]);
 
   /* ══ FIREBASE LISTENERS ══ */
   useEffect(()=>{
@@ -356,26 +361,94 @@ export default function App() {
       const snap = await get(roomRef(joinInput));
       if(!snap.exists()){setJoinErr('الغرفة غير موجودة');return;}
       const data = snap.val();
-      if(data.game?.phase!=='lobby'){setJoinErr('اللعبة بدأت — لا يمكن الانضمام');return;}
+      const existingPlayers = Object.entries(data.players||{});
+      const gamePhase = data.game?.phase || 'lobby';
+
+      // Check if player already exists (rejoin)
+      const existing = existingPlayers.find(([id,p])=>
+        p.name?.trim()===joinName.trim() && p.nick?.trim()===joinNick.trim()
+      );
+
+      if(existing) {
+        // REJOIN — player already registered
+        const [existingId, existingData] = existing;
+        setMyId(existingId);
+        setMyNickLocal(existingData.nick);
+        setRoomCode(joinInput);
+        setRole('player');
+        // Save to localStorage for auto-rejoin
+        localStorage.setItem('ng_session', JSON.stringify({
+          roomCode: joinInput, name: joinName.trim(), nick: joinNick.trim(), playerId: existingId
+        }));
+        if(gamePhase==='lobby') setGameScreen('waiting');
+        else if(gamePhase==='attacking') setGameScreen('attack');
+        else if(gamePhase==='revealing') setGameScreen('results');
+        else if(gamePhase==='ended') setGameScreen('winner');
+        notify('✅ تم الرجوع للعبة!', 'success');
+        return;
+      }
+
+      // NEW JOIN — player not registered yet
+      if(gamePhase!=='lobby'){
+        setJoinErr('اللعبة بدأت — لا يمكن الانضمام لأول مرة');
+        return;
+      }
       // check nick not taken
-      const existingNicks = Object.values(data.players||{}).flatMap(p=>[p.nick,p.nick2].filter(Boolean));
+      const existingNicks = existingPlayers.flatMap(([,p])=>[p.nick,p.nick2].filter(Boolean));
       if(existingNicks.includes(joinNick.trim())){setJoinErr('اللقب مأخوذ — اختر لقباً آخر');return;}
       const newRef = push(playersRef(joinInput));
       await set(newRef, {
         name:joinName.trim(), nick:joinNick.trim(), nick2:null,
         initials:mkI(joinName.trim()),
-        colorIdx: Object.keys(data.players||{}).length % AV_COLORS.length,
+        colorIdx: existingPlayers.length % AV_COLORS.length,
         status:'active', missedRounds:0,
       });
       setMyId(newRef.key);
       setMyNickLocal(joinNick.trim());
       setRoomCode(joinInput);
       setRole('player');
+      // Save to localStorage
+      localStorage.setItem('ng_session', JSON.stringify({
+        roomCode: joinInput, name: joinName.trim(), nick: joinNick.trim(), playerId: newRef.key
+      }));
+      setShowTutorial(true);
       setGameScreen('waiting');
       notify('✅ انضممت للعبة! انتظر المشرف', 'success');
     } catch(e) {
       setJoinErr('خطأ في الاتصال — تحقق من الإنترنت');
     }
+  };
+
+  /* ══ AUTO-REJOIN from localStorage ══ */
+  const checkAutoRejoin = async () => {
+    try {
+      const saved = localStorage.getItem('ng_session');
+      if(!saved) { setIsLoading(false); return; }
+      const session = JSON.parse(saved);
+      if(!session.roomCode||!session.name||!session.nick) return;
+      const snap = await get(roomRef(session.roomCode));
+      if(!snap.exists()) { localStorage.removeItem('ng_session'); return; }
+      const data = snap.val();
+      const existing = Object.entries(data.players||{}).find(([id,p])=>
+        p.name?.trim()===session.name && p.nick?.trim()===session.nick
+      );
+      if(!existing) { localStorage.removeItem('ng_session'); return; }
+      const [existingId] = existing;
+      setMyId(existingId);
+      setMyNickLocal(session.nick);
+      setJoinName(session.name);
+      setJoinNick(session.nick);
+      setJoinInput(session.roomCode);
+      setRoomCode(session.roomCode);
+      setRole('player');
+      const phase = data.game?.phase || 'lobby';
+      if(phase==='lobby') setGameScreen('waiting');
+      else if(phase==='attacking') setGameScreen('attack');
+      else if(phase==='revealing') setGameScreen('results');
+      else if(phase==='ended') setGameScreen('winner');
+      notify('✅ رجعنا للعبة تلقائياً!', 'gold');
+    } catch(e) { localStorage.removeItem('ng_session'); }
+    finally { setIsLoading(false); }
   };
 
   /* ══ ADMIN: START GAME / LAUNCH ROUND ══ */
@@ -480,7 +553,7 @@ export default function App() {
     await update(gameRef(roomCode),{deadline:(deadline||Date.now())+ms});
     notify(`⏱️ تمديد ${fmtMs(ms)}`,'gold');
   };
-  const endGame = async () => { await update(gameRef(roomCode),{phase:'ended'}); };
+  const endGame = async () => { await update(gameRef(roomCode),{phase:'ended'}); localStorage.removeItem('ng_session'); };
   const elimCheat = async (pid) => {
     const p = playersList.find(pl=>pl.id===pid);
     await update(ref(db,`rooms/${roomCode}/players/${pid}`),{status:'cheater',eliminatedRound:roundNum,eliminatedBy:'المشرف'});
@@ -576,6 +649,7 @@ export default function App() {
           <div className="ig"><label className="lbl">اسمك الكامل</label><input className="inp" placeholder="محمد عبدالله" value={joinName} onChange={e=>setJoinName(e.target.value)}/></div>
           <div className="ig"><label className="lbl">لقبك الذي اخترته</label><input className="inp" placeholder="القناص" value={joinNick} onChange={e=>setJoinNick(e.target.value)}/></div>
           <div style={{background:'rgba(240,192,64,.06)',border:'1px solid rgba(240,192,64,.2)',borderRadius:8,padding:'8px 12px',fontSize:11,color:'var(--muted)'}}>💡 اختر لقباً لا يمت بصلة لاهتماماتك الحقيقية!</div>
+          <div style={{marginTop:8,background:'rgba(79,163,224,.06)',border:'1px solid rgba(79,163,224,.2)',borderRadius:8,padding:'8px 12px',fontSize:11,color:'var(--muted)'}}>🔄 إذا خرجت من اللعبة عن طريق الخطأ، أدخل نفس البيانات للرجوع</div>
           {joinErr&&<div className="err-msg">⚠️ {joinErr}</div>}
         </div>
         <button className="btn bg" onClick={joinRoom}>🚀 انضمام</button>
@@ -1181,6 +1255,23 @@ export default function App() {
   /* ══ MAIN ══ */
   const navItems=[{id:'news',icon:'🔔',label:'أخبار',dot:hasNews},{id:'game',icon:'🎭',label:'اللعبة'},{id:'suggest',icon:'💡',label:'اقتراح'},{id:'pricing',icon:'💎',label:'الباقات'}];
 
+  /* ── Loading splash ── */
+  if(isLoading) return(
+    <div style={{minHeight:'100vh',background:'#07071a',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:16}}>
+      <style>{CSS}</style>
+      <Stars/>
+      <div style={{fontSize:64,animation:'bnc 1s infinite'}}>🎭</div>
+      <div style={{fontFamily:'Cairo',fontSize:22,fontWeight:900,background:'linear-gradient(135deg,#f0c040,#ff8c00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>
+        لعبة الألقاب
+      </div>
+      <div style={{display:'flex',gap:6,marginTop:8}}>
+        {[0,1,2].map(i=>(
+          <div key={i} style={{width:8,height:8,borderRadius:'50%',background:'#f0c040',opacity:.3,animation:`pls 1.2s infinite`,animationDelay:`${i*0.2}s`}}/>
+        ))}
+      </div>
+    </div>
+  );
+
   return(
     <div className="app">
       <style>{CSS}</style>
@@ -1195,6 +1286,64 @@ export default function App() {
           <button className="btn bgh" style={{flex:1}} onClick={()=>setModal(null)}>انتظر</button>
         </div>
       </div></div>}
+      {/* ══ TUTORIAL MODAL ══ */}
+      {showTutorial&&<div className="mbg" style={{alignItems:'flex-start',paddingTop:20,overflowY:'auto'}}>
+        <div className="modal" style={{maxWidth:420,textAlign:'right',padding:22}}>
+          <div style={{textAlign:'center',marginBottom:14}}>
+            <div style={{fontSize:44}}>🎭</div>
+            <div style={{fontFamily:'Cairo',fontSize:19,fontWeight:900,color:'var(--gold)',marginTop:6}}>كيف تلعب لعبة الألقاب؟</div>
+          </div>
+
+          <div style={{marginBottom:14}}>
+            <div style={{fontWeight:700,fontSize:13,color:'var(--gold)',marginBottom:6}}>🎯 فكرة اللعبة</div>
+            <div style={{fontSize:12,color:'var(--muted)',lineHeight:1.8}}>كل لاعب يختار لقباً سرياً لا يمت بصلة لشخصيته الحقيقية. الهدف أن تكشف هوية الآخرين قبل أن يكشفوا هويتك!</div>
+          </div>
+
+          <div style={{marginBottom:14}}>
+            <div style={{fontWeight:700,fontSize:13,color:'var(--gold)',marginBottom:6}}>🏷️ كيف تختار لقبك؟</div>
+            <div style={{fontSize:12,color:'var(--muted)',lineHeight:1.8}}>
+              ✦ اختر لقباً لا علاقة له بك أو باهتماماتك<br/>
+              ✦ كلما كان اللقب مضللاً، كلما زادت فرصة نجاتك<br/>
+              ✦ مثال: لو أنت تحب الصيد، لا تختار "الصياد"!
+            </div>
+          </div>
+
+          <div style={{marginBottom:14}}>
+            <div style={{fontWeight:700,fontSize:13,color:'var(--gold)',marginBottom:6}}>⚔️ كيف تهاجم؟</div>
+            <div style={{fontSize:12,color:'var(--muted)',lineHeight:1.8}}>
+              <span style={{color:'var(--text)',fontWeight:700}}>① </span>اختر لقباً من لوحة الألقاب تعتقد أنك تعرف صاحبه<br/>
+              <span style={{color:'var(--text)',fontWeight:700}}>② </span>اختر الشخص الذي تعتقد أنه صاحب هذا اللقب<br/>
+              <span style={{color:'var(--text)',fontWeight:700}}>③ </span>اضغط "تأكيد الهجوم" — الكل يهاجم في نفس الوقت سراً<br/>
+              <span style={{color:'var(--text)',fontWeight:700}}>④ </span>المشرف يكشف النتائج للجميع في لحظة واحدة 🔓
+            </div>
+          </div>
+
+          <div style={{marginBottom:14}}>
+            <div style={{fontWeight:700,fontSize:13,color:'var(--gold)',marginBottom:6}}>📊 كيف تقرأ الإحصائيات؟</div>
+            <div style={{fontSize:12,color:'var(--muted)',lineHeight:1.8}}>
+              <span style={{color:'var(--gold)',fontWeight:700}}>هجماته</span> — كم مرة هاجم على لقب<br/>
+              <span style={{color:'var(--green)',fontWeight:700}}>إصاباته</span> — كم مرة نجح في كشف لقب<br/>
+              <span style={{color:'var(--red)',fontWeight:700}}>كُشف عنه</span> — كم مرة كشف أحد لقبه<br/>
+              <span style={{color:'var(--blue)',fontWeight:700}}>خُمّن هو</span> — كم مرة ذُكر اسمه كتخمين
+            </div>
+          </div>
+
+          <div style={{marginBottom:18}}>
+            <div style={{fontWeight:700,fontSize:13,color:'var(--gold)',marginBottom:6}}>⚠️ قوانين مهمة</div>
+            <div style={{fontSize:12,color:'var(--muted)',lineHeight:1.8}}>
+              ✦ جولتان بدون هجوم = خروج صامت بلا كشف لقبك<br/>
+              ✦ التعاون مع لاعب آخر ممنوع — عقوبته الإخراج<br/>
+              ✦ الألقاب لا تُكشف كاملةً إلا في نهاية المسابقة
+            </div>
+          </div>
+
+          <div style={{display:'flex',gap:8}}>
+            <button className="btn bg" style={{flex:2}} onClick={()=>setShowTutorial(false)}>✅ فهمت — ابدأ!</button>
+            <button className="btn bgh" style={{flex:1}} onClick={()=>setShowTutorial(false)}>تخطي</button>
+          </div>
+        </div>
+      </div>}
+
       {modal?.type==='confirm_end'&&<div className="mbg"><div className="modal">
         <div className="micn">🛑</div><div className="mtitle" style={{color:'var(--red)'}}>إنهاء المسابقة؟</div>
         <div className="msub">سيُعلن الفائزون الحاليون.</div>
