@@ -25,7 +25,7 @@ html,body{font-family:'Tajawal',sans-serif;direction:rtl;background:#07071a;colo
 .stars{position:fixed;inset:0;pointer-events:none;z-index:0}
 .star{position:absolute;border-radius:50%;background:#fff;animation:tw 3s infinite alternate}
 @keyframes tw{from{opacity:.04}to{opacity:.5}}
-.bnav{position:fixed;bottom:0;left:0;right:0;z-index:80;background:rgba(7,7,26,.97);backdrop-filter:blur(16px);border-top:1px solid var(--border);display:flex;align-items:stretch;height:62px;max-width:520px;margin:0 auto;}
+.bnav{position:fixed;bottom:0;left:0;right:0;z-index:80;background:rgba(7,7,26,.97);backdrop-filter:blur(16px);border-top:1px solid var(--border);display:flex;align-items:stretch;height:62px;max-width:720px;margin:0 auto;}
 .bnav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;transition:all .18s;border:none;background:transparent;padding:6px 2px;color:var(--muted);font-family:'Tajawal',sans-serif;}
 .bnav-item.active{color:var(--gold)}
 .bnav-icon{font-size:20px;line-height:1}
@@ -34,7 +34,10 @@ html,body{font-family:'Tajawal',sans-serif;direction:rtl;background:#07071a;colo
 @keyframes pls{0%,100%{opacity:1}50%{opacity:.4}}
 .hdr{position:sticky;top:0;z-index:60;background:rgba(7,7,26,.97);backdrop-filter:blur(14px);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
 .logo{font-family:'Cairo',sans-serif;font-size:18px;font-weight:900;background:linear-gradient(135deg,var(--gold),#ff8c00);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.main{position:relative;z-index:5;flex:1;padding:14px;max-width:520px;margin:0 auto;width:100%}
+.main{position:relative;z-index:5;flex:1;padding:14px;max-width:580px;margin:0 auto;width:100%}
+@media(max-width:390px){.main{padding:10px}.bgrid{grid-template-columns:repeat(2,1fr)!important}.sg4{grid-template-columns:1fr 1fr!important}}
+@media(min-width:768px){.main{max-width:640px;padding:20px}.card{padding:18px}.bgrid{grid-template-columns:repeat(4,1fr)!important}}
+@media(min-width:1024px){.main{max-width:720px}}
 .scr{animation:fi .3s ease}
 @keyframes fi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .ptitle{font-family:'Cairo',sans-serif;font-size:23px;font-weight:900;text-align:center;margin-bottom:4px;background:linear-gradient(135deg,var(--gold),#ff8c00);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
@@ -73,8 +76,8 @@ textarea.inp{resize:vertical;min-height:80px}
 .nt{padding:9px 5px;border:1.5px solid rgba(240,192,64,.15);border-radius:9px;text-align:center;cursor:pointer;transition:all .2s;font-size:13px;font-weight:700;color:var(--text);background:#09091e;min-height:50px;display:flex;flex-direction:column;align-items:center;justify-content:center}
 .nt:hover:not(.nd){border-color:var(--gold);background:rgba(240,192,64,.07);transform:translateY(-1px)}
 .nt.nsel{border-color:var(--gold);background:rgba(240,192,64,.14);color:var(--gold)}
-.nt.nd{opacity:.28;cursor:not-allowed;background:#080818;border-color:rgba(255,255,255,.04)}
-.nt-sub{font-size:9px;color:var(--red);margin-top:3px;font-weight:400;line-height:1.3}
+.nt.nd{opacity:.55;cursor:not-allowed;background:#120810;border-color:rgba(230,57,80,.2)}
+.nt-sub{font-size:9px;color:#ff8fa3;margin-top:3px;font-weight:600;line-height:1.3}
 .ngrid{display:flex;flex-direction:column;gap:5px}
 .nr{display:flex;align-items:center;gap:8px;padding:9px 11px;background:#09091e;border:1.5px solid rgba(255,255,255,.06);border-radius:9px;cursor:pointer;transition:all .2s}
 .nr:hover:not(.nrd){border-color:var(--gold);background:rgba(240,192,64,.05)}
@@ -83,7 +86,7 @@ textarea.inp{resize:vertical;min-height:80px}
 .nr-av{width:31px;height:31px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;flex-shrink:0}
 .nr-info{flex:1;min-width:0}
 .nr-name{font-size:13px;font-weight:700}
-.nr-sub{font-size:10px;color:var(--red);margin-top:1px;line-height:1.4}
+.nr-sub{font-size:10px;color:#ff8fa3;margin-top:1px;line-height:1.4;font-weight:500}
 .pi{display:flex;align-items:center;gap:8px;padding:9px 10px;background:#09091e;border:1px solid rgba(255,255,255,.05);border-radius:9px;margin-bottom:5px;transition:all .2s}
 .pi:hover{border-color:rgba(240,192,64,.18)}
 .pi.dim{opacity:.32}
@@ -150,7 +153,7 @@ textarea.inp{resize:vertical;min-height:80px}
 .grave{background:rgba(230,57,80,.07);border:1px solid rgba(230,57,80,.18);border-radius:10px;padding:10px;margin-bottom:5px}
 .grave-name{font-size:13px;font-weight:700}
 .grave-nick{font-size:11px;color:var(--gold);margin-top:2px}
-.grave-info{font-size:10px;color:var(--muted);margin-top:3px;line-height:1.5}
+.grave-info{font-size:11px;color:#a09ac0;margin-top:3px;line-height:1.5}
 .wcard{background:linear-gradient(135deg,rgba(240,192,64,.18),rgba(255,140,0,.08));border:2px solid var(--gold);border-radius:16px;padding:22px;text-align:center;margin-bottom:12px}
 .wcrown{font-size:44px;margin-bottom:5px;animation:bnc 1s infinite}
 @keyframes bnc{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
@@ -533,7 +536,6 @@ export default function App() {
       localStorage.setItem('ng_session', JSON.stringify({
         roomCode: joinInput, name: joinName.trim(), nick: joinNick.trim(), playerId: newRef.key
       }));
-      setShowTutorial(true);
       setGameScreen('waiting');
       notify('✅ انضممت للعبة! انتظر المشرف', 'success');
     } catch(e) {
@@ -678,39 +680,74 @@ export default function App() {
   };
 
   const processReveal = async (currentAttacks) => {
-    // Play suspense sound
     playSound('suspense');
 
-    // Check if poison nick was attacked incorrectly
     if(poisonNick) {
       const poisonAttacks = currentAttacks.filter(a=>a.targetNick===poisonNick&&!a.correct);
       if(poisonAttacks.length>0) {
-        setTimeout(()=>{ playSound('poison_hit'); notify(`☠️ ${poisonAttacks.length} لاعب أصاب اللقب المسموم — خسروا جولة هجوم!`,'info'); },600);
+        setTimeout(()=>{ playSound('poison_hit'); notify(`☠️ ${poisonAttacks.length} لاعب أصاب اللقب المسموم!`,'info'); },600);
       }
     }
 
-    // Deduplicate — if two attacks hit same player, count as ONE elimination
+    // Deduplicate — two attacks on same player = ONE elimination, merge attacker names
     const seenElimIds = new Set();
-    const deduped = currentAttacks.map(a=>{
-      if(a.correct && !seenElimIds.has(a.realOwnerId)){
+    const elimAttackers = {}; // playerId -> [attacker nicks]
+    currentAttacks.forEach(a=>{
+      if(a.correct){
+        if(!elimAttackers[a.realOwnerId]) elimAttackers[a.realOwnerId]=[];
+        elimAttackers[a.realOwnerId].push(a.attackerNick);
         seenElimIds.add(a.realOwnerId);
-        return a;
       }
-      return {...a, correct:false, dedupedDouble:true}; // mark duplicate as failed
     });
     const elimIds = seenElimIds;
+
+    // ══ SILENT ROUND: store attacks only, keep everyone active ══
+    if(silentRound){
+      const roundKey = `round_${roundNum}`;
+      // Build silent exit data (for later reveal) but DON'T change player status
+      const silentExits = playersList
+        .filter(p=>elimIds.has(p.id))
+        .map(p=>({
+          playerId: p.id, nick:p.nick, nick2:p.nick2, name:p.name,
+          attackers: elimAttackers[p.id]||[], roundNum,
+          initials:p.initials, colorIdx:p.colorIdx
+        }));
+      // Also track missed rounds for silent
+      const silentMissed = playersList
+        .filter(p=>p.status==='active'&&!currentAttacks.some(a=>a.attackerNick===p.nick))
+        .map(p=>({playerId:p.id, missedRounds:(p.missedRounds||0)+1}));
+
+      const updates = {};
+      updates[`rooms/${roomCode}/rounds/${roundKey}`]={
+        round:roundNum, attacks:attacks||{}, endedAt:Date.now(), silent:true
+      };
+      updates[`rooms/${roomCode}/game/phase`]='attacking';
+      updates[`rooms/${roomCode}/game/silentPending`]={ silentExits, silentMissed, roundNum };
+      await update(ref(db), updates);
+      setSilentRound(false);
+      // Launch next round immediately — silent results hidden
+      notify(`🤫 جولة الصمت ${roundNum} — انتقلنا للجولة ${roundNum+1}`,'info');
+      await launchRound(roundNum+1);
+      return;
+    }
+
+    // ══ NORMAL ROUND ══
     const updates = {};
-    const exitList = []; // for cinematic exits
+    const exitList = [];
 
     for(const p of playersList){
       if(elimIds.has(p.id)){
-        const allWho = deduped.filter(a=>a.realOwnerId===p.id&&a.correct);
-        const who = allWho[0];
-        const multiKill = allWho.length>1?allWho.map(a=>a.attackerNick).join(' + '):''; // dual kill
+        const attackers = elimAttackers[p.id]||[];
+        const eliminatedByStr = attackers.join(' + ');
         updates[`rooms/${roomCode}/players/${p.id}/status`]='eliminated';
-        updates[`rooms/${roomCode}/players/${p.id}/eliminatedBy`]=who?.attackerNick||'لاعب';
+        updates[`rooms/${roomCode}/players/${p.id}/eliminatedBy`]=eliminatedByStr;
+        updates[`rooms/${roomCode}/players/${p.id}/eliminatedByList`]=attackers;
         updates[`rooms/${roomCode}/players/${p.id}/eliminatedRound`]=roundNum;
-        exitList.push({nick:p.nick, name:p.name, eliminatedBy:who?.attackerNick||'لاعب', initials:p.initials, colorIdx:p.colorIdx});
+        exitList.push({
+          nick:p.nick, nick2:p.nick2, name:p.name,
+          eliminatedBy:eliminatedByStr, attackers,
+          initials:p.initials, colorIdx:p.colorIdx
+        });
       } else if(p.status==='active'){
         const submitted = currentAttacks.some(a=>a.attackerNick===p.nick);
         const nm = submitted ? 0 : (p.missedRounds||0)+1;
@@ -718,30 +755,16 @@ export default function App() {
         if(nm>=2){
           updates[`rooms/${roomCode}/players/${p.id}/status`]='inactive';
           updates[`rooms/${roomCode}/players/${p.id}/eliminatedRound`]=roundNum;
-          exitList.push({nick:p.nick, name:p.name, eliminatedBy:'الخمول', initials:p.initials, colorIdx:p.colorIdx, inactive:true});
+          exitList.push({nick:p.nick, name:p.name, eliminatedBy:'الخمول', attackers:[], initials:p.initials, colorIdx:p.colorIdx, inactive:true});
         }
       }
     }
 
-    // Handle silent round — store data, don't reveal yet
-    if(silentRound){
-      const roundKey = `round_${roundNum}`;
-      updates[`rooms/${roomCode}/rounds/${roundKey}`]={ round:roundNum, attacks:attacks||{}, endedAt:Date.now(), silent:true };
-      updates[`rooms/${roomCode}/game/phase`]='attacking'; // stay in attacking!
-      updates[`rooms/${roomCode}/game/silentPending`]={ exitList, roundNum };
-      await update(ref(db), updates);
-      setSilentRound(false);
-      notify('🤫 جولة الصمت — النتائج محفوظة حتى تقرر الكشف','info');
-      return;
-    }
-
-    // Save round to history
     const roundKey = `round_${roundNum}`;
     updates[`rooms/${roomCode}/rounds/${roundKey}`]={ round:roundNum, attacks:attacks||{}, endedAt:Date.now() };
     updates[`rooms/${roomCode}/game/phase`]='revealing';
     await update(ref(db), updates);
 
-    // Show cinematic exits one by one with sound
     if(exitList.length>0){
       exitList.forEach((ex,i)=>{
         setTimeout(()=>{
@@ -752,9 +775,12 @@ export default function App() {
       });
     }
 
-    // Init flip cards
+    // Init flip cards — ONE card per eliminated player (deduplicated)
     const fc = {};
-    currentAttacks.filter(a=>a.correct).forEach(a=>{ fc[a.targetNick]=false; });
+    [...elimIds].forEach(id=>{
+      const p = playersList.find(pl=>pl.id===id);
+      if(p) fc[p.nick]=false;
+    });
     setFlipCards(fc);
   };
 
@@ -1125,10 +1151,16 @@ export default function App() {
           {elimPlayers.length>0&&<div className="card">
             <div className="ctitle">⚰️ مقبرة الألقاب ({elimPlayers.length})</div>
             <div className="sc">
+              {/* Silent pending — show as mystery */}
+              {gameState?.silentPending?.silentExits?.map((ex,i)=>(
+                <div key={i} className="grave" style={{borderColor:'rgba(79,163,224,.3)',background:'rgba(79,163,224,.05)'}}>
+                  <div className="grave-name" style={{color:'var(--blue)'}}>🤫 لقب مخفي</div>
+                  <div className="grave-info" style={{color:'var(--blue)'}}>جولة الصمت {ex.roundNum} — سيُكشف لاحقاً</div>
+                </div>
+              ))}
               {[...elimPlayers].sort((a,b)=>(b.eliminatedRound||0)-(a.eliminatedRound||0)).map(p=>(
                 <div key={p.id} className="grave">
                   <div className="grave-name">{p.name}</div>
-                  {/* Only show nick if eliminated by attack — hide for cheater/inactive (Suspense!) */}
                   {p.status==='eliminated'&&<div className="grave-nick">"{p.nick}"{p.nick2?` / "${p.nick2}"`:''}</div>}
                   <div className="grave-info">
                     {p.status==='cheater'?'🚫 خرج من المسابقة':
@@ -1298,30 +1330,31 @@ export default function App() {
             {lt&&<div className="card2" style={{marginBottom:0,textAlign:'center'}}><div style={{fontSize:10,color:'var(--muted)',marginBottom:2}}>👻 أقل استهدافاً</div><div style={{fontWeight:700,fontSize:14}}>{lt.name}</div><div style={{fontSize:10,color:'var(--muted)'}}>{lt.count} محاولة</div></div>}
           </div>
 
-          {correct.length>0&&<div className="card" style={{marginTop:10}}>
+          {Object.keys(flipCards).length>0&&<div className="card" style={{marginTop:10}}>
             <div className="ctitle">💥 كُشفت الهويات — اضغط البطاقة للكشف</div>
-            {correct.map((a,i)=>{
-              const elim=playersList.find(p=>p.id===a.realOwnerId);
-              const flipped=flipCards[a.targetNick]||false;
+            {[...new Set(atks.filter(a=>a.correct).map(a=>a.realOwnerId))].map((elimId,i)=>{
+              const elim=playersList.find(p=>p.id===elimId);
+              if(!elim) return null;
+              // Collect all attackers who got this player
+              const allAttackers=[...new Set(atks.filter(a=>a.correct&&a.realOwnerId===elimId).map(a=>a.attackerNick))];
+              const flipped=flipCards[elim.nick]||false;
               return(
-                <div key={i} className="flip-scene" onClick={()=>{
+                <div key={elimId} className="flip-scene" onClick={()=>{
                   if(!flipped){ playSound('explosion'); }
-                  setFlipCards(prev=>({...prev,[a.targetNick]:!prev[a.targetNick]}));
+                  setFlipCards(prev=>({...prev,[elim.nick]:!flipped}));
                 }}>
                   <div className={`flip-card${flipped?' flipped':''}`}>
-                    {/* FRONT — mystery */}
                     <div className="flip-front">
                       <div style={{fontSize:36,marginBottom:8}}>🎭</div>
-                      <div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:'var(--gold)'}}>"{a.targetNick}"</div>
+                      <div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:'var(--gold)'}}>"{elim.nick}"</div>
                       <div style={{fontSize:11,color:'var(--muted)',marginTop:6}}>اضغط لكشف الهوية 👆</div>
                     </div>
-                    {/* BACK — reveal */}
                     <div className="flip-back">
                       <Av p={{...elim,status:'eliminated'}} sz={44} fs={16}/>
-                      <div style={{fontFamily:'Cairo',fontSize:16,fontWeight:900,color:'var(--gold)',marginTop:8}}>"{a.targetNick}"</div>
-                      <div style={{fontSize:14,color:'var(--text)',marginTop:4}}>{elim?.name}</div>
+                      <div style={{fontFamily:'Cairo',fontSize:16,fontWeight:900,color:'var(--gold)',marginTop:8}}>"{elim.nick}"</div>
+                      <div style={{fontSize:14,color:'var(--text)',marginTop:4}}>{elim.name}</div>
                       <div style={{fontSize:11,color:'var(--muted)',marginTop:6}}>
-                        🗡️ كُشف من قِبَل: <span style={{color:'var(--gold)'}}>{a.attackerNick}</span>
+                        ⚔️ كُشف من قِبَل: <span style={{color:'var(--gold)'}}>{allAttackers.join(' + ')}</span>
                       </div>
                     </div>
                   </div>
@@ -1340,28 +1373,6 @@ export default function App() {
               </div>
             ))}
           </div>}
-
-          {/* LEADERBOARD after each round */}
-          <div className="card">
-            <div className="ctitle">🏆 لوحة المتصدرين</div>
-            <div style={{fontSize:11,color:'var(--muted)',marginBottom:8}}>الترتيب بدون كشف الأسماء — النقاط: إصابة×3 + هجوم×1</div>
-            {getLeaderboard().slice(0,5).map((p,i)=>(
-              <div key={p.id} className={`lb-row ${i===0?'lb-1':i===1?'lb-2':i===2?'lb-3':''}`}>
-                <div className="lb-rank" style={{color:i===0?'var(--gold)':i===1?'rgba(200,200,220,.8)':i===2?'var(--red)':'var(--muted)'}}>
-                  {i===0?'👑':i===1?'🥈':i===2?'🥉':`${i+1}`}
-                </div>
-                <Av p={p} sz={30} fs={11}/>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:11,color:p.status==='active'?'var(--gold)':'var(--muted)'}}>
-                    {p.status==='active'?'🏆 فائز':` لاعب ${i+1}${p.status!=='active'?' (خرج)':''}`}
-                  </div>
-                  <div style={{fontSize:10,color:'var(--muted)',marginTop:1}}>⚔️{p.attacks} 🎯{p.hits} 👁️{p.targeted}</div>
-                </div>
-                <div style={{fontFamily:'Cairo',fontSize:17,fontWeight:900,color:i===0?'var(--gold)':'var(--text)'}}>{p.score}نقطة</div>
-              </div>
-            ))}
-            <button className="btn bgh bsm mt2" style={{fontSize:11}} onClick={()=>setShowLeaderboard(true)}>عرض الكل</button>
-          </div>
 
           <div className="card">
             <div className="ctitle">👥 المتبقون ({activePlayers.length})</div>
@@ -1383,7 +1394,7 @@ export default function App() {
     if(gameScreen==='stats') return(
       <div className="scr">
         <button className="btn bgh bsm" style={{width:'auto',marginBottom:12}} onClick={()=>setGameScreen('attack')}>← رجوع</button>
-        <div className="tabs">{[['round','الجولة'],['heat','الإثارة'],['all','الكل'],['admin_d','🕵️']].map(([k,l])=>(
+        <div className="tabs">{[['round','الجولة الحالية'],['heat','كامل الجولات'],['admin_d','🕵️']].map(([k,l])=>(
           <button key={k} className={`tab${statsTab===k?' on':''}`}
             onClick={()=>{if(k==='admin_d'&&role!=='admin'){notify('للمشرف فقط','error');return;}setStatsTab(k);}}>
             {l}
@@ -1392,28 +1403,66 @@ export default function App() {
 
         {/* ══ تبويب الجولة ══ */}
         {statsTab==='round'&&<>
-          <div className="sg">
-            <div className="sbox"><div className="snum">{submittedCount}</div><div className="slbl">أرسلوا هجماتهم</div></div>
-            <div className="sbox"><div className="snum">{activePlayers.length}</div><div className="slbl">نشطون</div></div>
+          {/* أرقام الجولة */}
+          <div className="sg sg3" style={{marginBottom:10}}>
+            <div className="sbox"><div className="snum">{submittedCount}</div><div className="slbl">أرسلوا</div></div>
+            <div className="sbox"><div className="snum" style={{color:'var(--green)'}}>{(phase==='revealing'||phase==='ended')?attacksList.filter(a=>a.correct).length:'—'}</div><div className="slbl">إصابات ✅</div></div>
+            <div className="sbox"><div className="snum" style={{color:'var(--red)'}}>{(phase==='revealing'||phase==='ended')?attacksList.filter(a=>!a.correct).length:'—'}</div><div className="slbl">فشل ❌</div></div>
           </div>
-          {/* إصابات وفشل تظهر فقط بعد الإعلان */}
-          {(phase==='revealing'||phase==='ended')?(
-            <div className="sg sg3">
-              <div className="sbox"><div className="snum">{attacksList.length}</div><div className="slbl">هجمات</div></div>
-              <div className="sbox"><div className="snum" style={{color:'var(--green)'}}>{attacksList.filter(a=>a.correct).length}</div><div className="slbl">إصابات ✅</div></div>
-              <div className="sbox"><div className="snum" style={{color:'var(--red)'}}>{attacksList.filter(a=>!a.correct).length}</div><div className="slbl">فشل ❌</div></div>
-            </div>
-          ):(
-            <div style={{textAlign:'center',background:'rgba(240,192,64,.06)',border:'1px solid rgba(240,192,64,.15)',borderRadius:10,padding:'12px',fontSize:12,color:'var(--muted)'}}>
-              🔒 تفاصيل الإصابات والفشل ستظهر بعد إعلان النتائج
+          {(phase!=='revealing'&&phase!=='ended')&&(
+            <div style={{textAlign:'center',background:'rgba(240,192,64,.06)',border:'1px solid rgba(240,192,64,.15)',borderRadius:10,padding:'10px',fontSize:12,color:'var(--muted)',marginBottom:10}}>
+              🔒 الإصابات والفشل تظهر بعد الإعلان
             </div>
           )}
-          <div style={{textAlign:'center',color:'var(--muted)',padding:'10px 0',fontSize:12}}>
-            📊 تفاصيل الإثارة في تبويب "الإثارة"
+
+          {/* هيت ماب الجولة الحالية */}
+          <div style={{display:'flex',gap:7,marginBottom:12}}>
+            <button className={`btn ${heatmapView==='nicks'?'bg':'bgh'}`} style={{flex:1}} onClick={()=>setHeatmapView('nicks')}>🎭 الألقاب</button>
+            <button className={`btn ${heatmapView==='names'?'bg':'bgh'}`} style={{flex:1}} onClick={()=>setHeatmapView('names')}>👤 الأسماء</button>
           </div>
+
+          {heatmapView==='nicks'&&(()=>{
+            const roundNickMap={};
+            attacksList.forEach(a=>{if(a.targetNick)roundNickMap[a.targetNick]=(roundNickMap[a.targetNick]||0)+1;});
+            const sorted=Object.entries(roundNickMap).sort((a,b)=>b[1]-a[1]);
+            const maxC=sorted[0]?.[1]||1;
+            return sorted.length===0?(
+              <div style={{textAlign:'center',color:'var(--muted)',padding:20,fontSize:12}}>لا هجمات بعد</div>
+            ):sorted.map(([nick,count],i)=>(
+              <div key={nick} style={{marginBottom:8,maxWidth:'100%',overflow:'hidden'}}>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:3,gap:8}}>
+                  <span style={{fontWeight:700,fontSize:13,color:i===0?'var(--red)':i===1?'var(--gold)':'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'60%'}}>{i+1}. {nick}</span>
+                  <span style={{fontSize:12,color:'var(--muted)'}}>{count} هجمة</span>
+                </div>
+                <div style={{height:6,background:'rgba(255,255,255,.06)',borderRadius:3,overflow:'hidden'}}>
+                  <div style={{height:'100%',width:`${Math.round(count/maxC*100)}%`,background:i===0?'var(--red)':i===1?'var(--gold)':'var(--muted)',borderRadius:3,transition:'width .4s'}}/>
+                </div>
+              </div>
+            ));
+          })()}
+
+          {heatmapView==='names'&&(()=>{
+            const roundNameMap={};
+            attacksList.forEach(a=>{if(a.guessedName)roundNameMap[a.guessedName]=(roundNameMap[a.guessedName]||0)+1;});
+            const sorted=Object.entries(roundNameMap).sort((a,b)=>b[1]-a[1]);
+            const maxC=sorted[0]?.[1]||1;
+            return sorted.length===0?(
+              <div style={{textAlign:'center',color:'var(--muted)',padding:20,fontSize:12}}>لا هجمات بعد</div>
+            ):sorted.map(([name,count],i)=>(
+              <div key={name} style={{marginBottom:8,maxWidth:'100%',overflow:'hidden'}}>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:3,gap:8}}>
+                  <span style={{fontWeight:700,fontSize:13,color:i===0?'var(--red)':i===1?'var(--gold)':'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'60%'}}>{i+1}. {name}</span>
+                  <span style={{fontSize:12,color:'var(--muted)'}}>{count} محاولة</span>
+                </div>
+                <div style={{height:6,background:'rgba(255,255,255,.06)',borderRadius:3,overflow:'hidden'}}>
+                  <div style={{height:'100%',width:`${Math.round(count/maxC*100)}%`,background:i===0?'var(--red)':i===1?'var(--gold)':'var(--muted)',borderRadius:3,transition:'width .4s'}}/>
+                </div>
+              </div>
+            ));
+          })()}
         </>}
 
-        {/* ══ تبويب الإثارة — للجميع، بدون كشف الألقاب/الأسماء معاً ══ */}
+        {/* ══ تبويب كامل الجولات ══ */}
         {statsTab==='heat'&&<>
           <div className="sg sg3" style={{marginBottom:14}}>
             <div className="sbox"><div className="snum">{allRoundsList.length}</div><div className="slbl">جولات</div></div>
@@ -1443,7 +1492,7 @@ export default function App() {
                 <div key={nick} style={{marginBottom:8}}>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
                     <div style={{display:'flex',alignItems:'center',gap:8}}>
-                      <div style={{fontFamily:'Cairo',fontSize:13,fontWeight:700,color:i===0?'var(--red)':i===1?'var(--gold)':i===2?'var(--blue)':'var(--text)'}}>
+                      <div style={{fontFamily:'Cairo',fontSize:13,fontWeight:700,color:i===0?'var(--red)':i===1?'var(--gold)':i===2?'var(--blue)':'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'60%'}}>
                         {i+1}. {nick}
                       </div>
                       {isElim&&<span className="tag tr" style={{fontSize:9}}>خرج</span>}
@@ -1470,7 +1519,7 @@ export default function App() {
               return(
                 <div key={name} style={{marginBottom:8}}>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
-                    <div style={{fontWeight:700,fontSize:13,color:i===0?'var(--red)':i===1?'var(--gold)':i===2?'var(--blue)':'var(--text)'}}>
+                    <div style={{fontWeight:700,fontSize:13,color:i===0?'var(--red)':i===1?'var(--gold)':i===2?'var(--blue)':'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'60%'}}>
                       {i+1}. {name}
                     </div>
                     <div style={{fontSize:12,color:'var(--muted)'}}>{count} محاولة</div>
@@ -1484,8 +1533,8 @@ export default function App() {
           </>}
         </>}
 
-        {/* ══ تبويب الكل — ملخص الجولات ══ */}
-        {statsTab==='all'&&<>
+        {/* ══ تبويب الكل — مخفي، دمجناه في كامل الجولات ══ */}
+        {statsTab==='all_hidden'&&<>
           <div className="sg sg4">
             <div className="sbox"><div className="snum">{allRoundsList.length}</div><div className="slbl">جولات</div></div>
             <div className="sbox"><div className="snum">{allAttacksFlat.length}</div><div className="slbl">هجمات</div></div>
@@ -1972,7 +2021,7 @@ export default function App() {
 
         {[
           ['☠️','اللقب المسموم — اختر لقباً سرياً، من يهاجمه ويخطئ يخسر جولة هجوم'],
-          ['🤫','جولة الصمت — النتائج تُخزَّن ولا تُكشف حتى تقرر أنت'],
+          ['🤫','جولة الصمت — النتائج تُكشف مع الجولة التالية، والخارجون يستمرون باللعب حتى الكشف'],
           ['🎮','هجوم بالنيابة — إذا لاعب جواله أُغلق، اضغط 🎮 بجانبه وهاجم نيابةً عنه'],
           ['🚫','إخراج للغش — إذا رأيت تعاوناً مشبوهاً اضغط "غش" بجانب اللاعب'],
         ].map(([icon,text],i)=>(
@@ -2067,64 +2116,6 @@ export default function App() {
       )}
 
       {/* ══ TUTORIAL MODAL ══ */}
-      {showTutorial&&<div className="mbg" style={{alignItems:'flex-start',paddingTop:20,overflowY:'auto'}}>
-        <div className="modal" style={{maxWidth:420,textAlign:'right',padding:22}}>
-          <div style={{textAlign:'center',marginBottom:14}}>
-            <div style={{fontSize:44}}>🎭</div>
-            <div style={{fontFamily:'Cairo',fontSize:19,fontWeight:900,color:'var(--gold)',marginTop:6}}>كيف تلعب لعبة الألقاب؟</div>
-          </div>
-
-          <div style={{marginBottom:14}}>
-            <div style={{fontWeight:700,fontSize:13,color:'var(--gold)',marginBottom:6}}>🎯 فكرة اللعبة</div>
-            <div style={{fontSize:12,color:'var(--muted)',lineHeight:1.8}}>كل لاعب يختار لقباً سرياً لا يمت بصلة لشخصيته الحقيقية. الهدف أن تكشف هوية الآخرين قبل أن يكشفوا هويتك!</div>
-          </div>
-
-          <div style={{marginBottom:14}}>
-            <div style={{fontWeight:700,fontSize:13,color:'var(--gold)',marginBottom:6}}>🏷️ كيف تختار لقبك؟</div>
-            <div style={{fontSize:12,color:'var(--muted)',lineHeight:1.8}}>
-              ✦ اختر لقباً لا علاقة له بك أو باهتماماتك<br/>
-              ✦ كلما كان اللقب مضللاً، كلما زادت فرصة نجاتك<br/>
-              ✦ مثال: لو أنت تحب الصيد، لا تختار "الصياد"!
-            </div>
-          </div>
-
-          <div style={{marginBottom:14}}>
-            <div style={{fontWeight:700,fontSize:13,color:'var(--gold)',marginBottom:6}}>⚔️ كيف تهاجم؟</div>
-            <div style={{fontSize:12,color:'var(--muted)',lineHeight:1.8}}>
-              <span style={{color:'var(--text)',fontWeight:700}}>① </span>اختر لقباً من لوحة الألقاب تعتقد أنك تعرف صاحبه<br/>
-              <span style={{color:'var(--text)',fontWeight:700}}>② </span>اختر الشخص الذي تعتقد أنه صاحب هذا اللقب<br/>
-              <span style={{color:'var(--text)',fontWeight:700}}>③ </span>اضغط "تأكيد الهجوم" — الكل يهاجم في نفس الوقت سراً<br/>
-              <span style={{color:'var(--text)',fontWeight:700}}>④ </span>المشرف يكشف النتائج للجميع في لحظة واحدة 🔓
-            </div>
-          </div>
-
-          <div style={{marginBottom:14}}>
-            <div style={{fontWeight:700,fontSize:13,color:'var(--gold)',marginBottom:6}}>📊 كيف تقرأ الإحصائيات؟</div>
-            <div style={{fontSize:12,color:'var(--muted)',lineHeight:1.8}}>
-              <span style={{color:'var(--gold)',fontWeight:700}}>هجماته</span> — كم مرة هاجم على لقب<br/>
-              <span style={{color:'var(--green)',fontWeight:700}}>إصاباته</span> — كم مرة نجح في كشف لقب<br/>
-              <span style={{color:'var(--red)',fontWeight:700}}>كُشف عنه</span> — كم مرة كشف أحد لقبه<br/>
-              <span style={{color:'var(--blue)',fontWeight:700}}>خُمّن هو</span> — كم مرة ذُكر اسمه كتخمين
-            </div>
-          </div>
-
-          <div style={{marginBottom:18}}>
-            <div style={{fontWeight:700,fontSize:13,color:'var(--gold)',marginBottom:6}}>⚠️ قوانين مهمة</div>
-            <div style={{fontSize:12,color:'var(--muted)',lineHeight:1.8}}>
-              ✦ جولتان بدون هجوم = خروج صامت بلا كشف لقبك<br/>
-              ✦ التعاون مع لاعب آخر ممنوع — عقوبته الإخراج<br/>
-              ✦ الألقاب لا تُكشف كاملةً إلا في نهاية المسابقة
-            </div>
-          </div>
-
-          <div style={{display:'flex',gap:8}}>
-            <button className="btn bg" style={{flex:2}} onClick={()=>setShowTutorial(false)}>✅ فهمت — ابدأ!</button>
-            <button className="btn bgh" style={{flex:1}} onClick={()=>setShowTutorial(false)}>تخطي</button>
-          </div>
-        </div>
-      </div>}
-
-      {/* ══ GUIDE MODAL ══ */}
       {modal?.type==='guide'&&(
         <div className="mbg" style={{alignItems:'flex-start',paddingTop:16,overflowY:'auto'}}>
           <div style={{background:'var(--card)',border:'1.5px solid var(--border)',borderRadius:16,padding:20,maxWidth:430,width:'100%',maxHeight:'90vh',overflowY:'auto'}}>
