@@ -2207,6 +2207,50 @@ export default function App() {
         </div>
       )}
 
+      {/* ══ EXIT MODAL ══ */}
+      {modal?.type==='exit_game'&&(
+        <div className="mbg"><div className="modal">
+          <div className="micn">🚪</div>
+          <div className="mtitle">خروج من اللعبة؟</div>
+          <div className="msub">
+            {role==='player'&&<>
+              إذا خرجت يمكنك العودة لاحقاً بنفس:<br/>
+              <span style={{color:'var(--gold)',fontWeight:700}}>رمز الغرفة + اسمك + لقبك</span>
+            </>}
+            {role==='admin'&&<>
+              إذا خرجت يمكنك العودة تلقائياً<br/>
+              عند فتح الرابط من نفس الجهاز
+            </>}
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            <button className="btn bgh" onClick={()=>setModal(null)}>
+              ← رجوع للعبة
+            </button>
+            <button className="btn br" onClick={()=>{
+              setModal(null);
+              localStorage.removeItem('ng_session');
+              localStorage.removeItem('ng_admin_session');
+              setRole(null);
+              setRoomCode('');
+              setGameState(null);
+              setPlayers({});
+              setAttacks({});
+              setAllRoundsData({});
+              setMyId(null);
+              setMyNickLocal('');
+              setJoinName('');
+              setJoinNick('');
+              setJoinInput('');
+              setGameScreen('home');
+              setTab('game');
+              notify('تم الخروج من اللعبة','info');
+            }}>
+              🚪 خروج نهائي
+            </button>
+          </div>
+        </div></div>
+      )}
+
       {modal?.type==='confirm_end'&&<div className="mbg"><div className="modal">
         <div className="micn">⚠️</div>
         <div className="mtitle" style={{color:'var(--red)'}}>إنهاء المسابقة كاملاً؟</div>
@@ -2232,7 +2276,17 @@ export default function App() {
 
       <div className="hdr">
         <div className="logo">{tab==='news'?'🔔 أخبار':tab==='game'?'🎭 لعبة الألقاب':tab==='suggest'?'💡 اقتراح':'💎 الباقات'}</div>
-        {tab==='game'&&roomCode&&role==='admin'&&phase!=='lobby'&&<button className="btn bg bsm" style={{width:'auto'}} onClick={()=>setGameScreen('admin_live')}>👑 تحكم</button>}
+        <div style={{display:'flex',gap:6,alignItems:'center'}}>
+          {tab==='game'&&roomCode&&role==='admin'&&phase!=='lobby'&&(
+            <button className="btn bg bsm" style={{width:'auto'}} onClick={()=>setGameScreen('admin_live')}>👑 تحكم</button>
+          )}
+          {tab==='game'&&roomCode&&(
+            <button className="btn bgh bsm" style={{width:'auto',color:'var(--muted)',fontSize:11,padding:'5px 10px'}}
+              onClick={()=>setModal({type:'exit_game'})}>
+              🚪 خروج
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="main">
