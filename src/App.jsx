@@ -914,14 +914,10 @@ export default function App() {
     /* ── ADMIN SETUP ── */
     if(gameScreen==='admin') return(
       <div className="scr">
-        <button className="btn bgh bsm" style={{width:'auto',marginBottom:12}} onClick={()=>{
-          localStorage.removeItem('ng_admin_session');
-          setRoomCode('');
-          setRole(null);
-          setGameState(null);
-          setPlayers({});
-          setGameScreen('home');
-        }}>← رجوع</button>
+        <button className="btn bgh bsm" style={{width:'auto',marginBottom:12}}
+          onClick={()=>setModal({type:'exit_game'})}>
+          ← رجوع
+        </button>
         <div className="card">
           <div className="ctitle">📡 رمز الغرفة <span className="online-dot"/></div>
           <div className="room-code-big">{roomCode}</div>
@@ -2223,17 +2219,17 @@ export default function App() {
           <div className="mtitle">خروج من اللعبة؟</div>
           <div className="msub">
             {role==='player'&&<>
-              إذا خرجت يمكنك العودة لاحقاً بنفس:<br/>
+              يمكنك العودة لاحقاً بنفس:<br/>
               <span style={{color:'var(--gold)',fontWeight:700}}>رمز الغرفة + اسمك + لقبك</span>
             </>}
             {role==='admin'&&<>
-              إذا خرجت يمكنك العودة تلقائياً<br/>
-              عند فتح الرابط من نفس الجهاز
+              المتسابقون سيبقون في انتظار عودتك.<br/>
+              <span style={{color:'var(--gold)',fontWeight:700}}>يمكنك العودة تلقائياً بفتح الرابط</span>
             </>}
           </div>
           <div style={{display:'flex',flexDirection:'column',gap:8}}>
-            <button className="btn bgh" onClick={()=>setModal(null)}>
-              ← رجوع للعبة
+            <button className="btn bg" onClick={()=>setModal(null)}>
+              ← أكمل اللعبة
             </button>
             <button className="btn br" onClick={()=>{
               setModal(null);
