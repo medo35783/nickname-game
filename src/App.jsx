@@ -560,7 +560,6 @@ export default function App() {
           else if(phase==='attacking') setGameScreen('attack');
           else if(phase==='revealing') setGameScreen('results');
           setIsLoading(false);
-          notify('✅ رجعت للغرفة كمشرف', 'gold');
           return;
         } else {
           localStorage.removeItem('ng_admin_session');
@@ -592,7 +591,6 @@ export default function App() {
       if(phase==='lobby') setGameScreen('waiting');
       else if(phase==='attacking') setGameScreen('attack');
       else if(phase==='revealing') setGameScreen('results');
-      notify('✅ رجعنا للعبة تلقائياً!', 'gold');
     } catch(e) { localStorage.removeItem('ng_session'); }
     finally { setIsLoading(false); }
   };
@@ -1761,9 +1759,9 @@ export default function App() {
   const exportPDF = () => {
     const lines = [];
     const add = (t='') => lines.push(t);
-    add('═══════════════════════════════════════');
+    add('='.repeat(39));
     add('         تقرير لعبة الألقاب - مشرف فقط');
-    add('═══════════════════════════════════════');
+    add('='.repeat(39));
     add(`غرفة: #${roomCode}   جولات: ${allRoundsList.length}   لاعبون: ${playersList.length}`);
     add(`إجمالي الهجمات: ${allAttacksFlat.length}   إصابات: ${allAttacksFlat.filter(a=>a.correct).length}`);
     add('');
@@ -1774,7 +1772,7 @@ export default function App() {
     allRoundsList.forEach(r=>{
       add(`
 الجولة ${r.round}${r.silent?' [صمت]':''}`);
-      add('─'.repeat(38));
+      add('-'.repeat(38));
       const ratks = Object.values(r.attacks||{});
       ratks.forEach(a=>{
         const status = a.correct?'✅ صحيح':'❌ خطأ';
@@ -1799,11 +1797,10 @@ export default function App() {
       add(`  ${p.name} "${p.nick}" | الحالة: ${statusAr} | هجمات: ${myAtks.length} | إصابات: ${hits.length} | استُهدف: ${tgtd.length}${p.eliminatedBy?` | كُشف بواسطة: ${p.eliminatedBy}`:''}`);
     });
     add('');
-    add('═══════════════════════════════════════');
+    add('='.repeat(39));
 
-    const content = lines.join('
-');
-    const blob = new Blob(['﻿'+content], {type:'text/plain;charset=utf-8'});
+    const content = lines.join('\n');
+    const blob = new Blob(['\uFEFF'+content], {type:'text/plain;charset=utf-8'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = `تقرير-لعبة-الألقاب-${roomCode}.txt`;
@@ -2216,7 +2213,7 @@ export default function App() {
       {modal?.type==='exit_game'&&(
         <div className="mbg"><div className="modal">
           <div className="micn">🚪</div>
-          <div className="mtitle">خروج من اللعبة؟</div>
+          <div className="mtitle">الرجوع للصفحة الرئيسية؟</div>
           <div className="msub">
             {role==='player'&&<>
               يمكنك العودة لاحقاً بنفس:<br/>
@@ -2280,16 +2277,27 @@ export default function App() {
       </div></div>}
 
       <div className="hdr">
-        <div className="logo">{tab==='news'?'🔔 أخبار':tab==='game'?'🎭 لعبة الألقاب':tab==='suggest'?'💡 اقتراح':'💎 الباقات'}</div>
+        {/* Right side — back/exit button when in a room */}
+        {tab==='game'&&roomCode?(
+          <button className="btn bgh bsm" style={{width:'auto',padding:'6px 12px',fontSize:12,color:'var(--muted)',border:'1px solid rgba(255,255,255,.1)'}}
+            onClick={()=>setModal({type:'exit_game'})}>
+            ← رجوع
+          </button>
+        ):(
+          <div style={{width:60}}/>
+        )}
+
+        {/* Center logo */}
+        <div className="logo" style={{position:'absolute',left:'50%',transform:'translateX(-50%)'}}>
+          {tab==='news'?'🔔 أخبار':tab==='game'?'🎭 لعبة الألقاب':tab==='suggest'?'💡 اقتراح':'💎 الباقات'}
+        </div>
+
+        {/* Left side — admin control button */}
         <div style={{display:'flex',gap:6,alignItems:'center'}}>
-          {tab==='game'&&roomCode&&role==='admin'&&phase!=='lobby'&&(
+          {tab==='game'&&roomCode&&role==='admin'&&phase!=='lobby'?(
             <button className="btn bg bsm" style={{width:'auto'}} onClick={()=>setGameScreen('admin_live')}>👑 تحكم</button>
-          )}
-          {tab==='game'&&roomCode&&(
-            <button className="btn bgh bsm" style={{width:'auto',color:'var(--muted)',fontSize:11,padding:'5px 10px'}}
-              onClick={()=>setModal({type:'exit_game'})}>
-              🚪 خروج
-            </button>
+          ):(
+            <div style={{width:60}}/>
           )}
         </div>
       </div>
