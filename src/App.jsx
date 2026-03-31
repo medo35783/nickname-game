@@ -853,6 +853,7 @@ export default function App() {
     /* ── WAITING (player joined, waiting for admin to start) ── */
     if(gameScreen==='waiting') return(
       <div className="scr">
+        <button className="btn bgh bsm" style={{width:'auto',marginBottom:12}} onClick={()=>setModal({type:'exit_game'})}>🚪 انسحاب</button>
         <div style={{textAlign:'center',padding:'40px 20px 20px'}}>
           <div style={{fontSize:64,marginBottom:12}}>⏳</div>
           <div className="ptitle">في انتظار المشرف</div>
@@ -913,6 +914,14 @@ export default function App() {
     /* ── ADMIN SETUP ── */
     if(gameScreen==='admin') return(
       <div className="scr">
+        <button className="btn bgh bsm" style={{width:'auto',marginBottom:12}} onClick={()=>{
+          localStorage.removeItem('ng_admin_session');
+          setRoomCode('');
+          setRole(null);
+          setGameState(null);
+          setPlayers({});
+          setGameScreen('home');
+        }}>← رجوع</button>
         <div className="card">
           <div className="ctitle">📡 رمز الغرفة <span className="online-dot"/></div>
           <div className="room-code-big">{roomCode}</div>
@@ -2245,7 +2254,7 @@ export default function App() {
               setTab('game');
               notify('تم الخروج من اللعبة','info');
             }}>
-              🚪 خروج نهائي
+              🚪 انسحاب من اللعبة
             </button>
           </div>
         </div></div>
