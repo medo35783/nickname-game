@@ -181,6 +181,22 @@ textarea.inp{resize:vertical;min-height:80px}
 .sugg-text{font-size:13px;line-height:1.6}
 .sugg-date{font-size:10px;color:var(--muted);margin-top:5px}
 .online-dot{width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block;margin-left:5px;animation:pls 2s infinite}
+/* ── PRINT ── */
+@media print{
+  .bnav,.hdr,.btn,.notif{display:none!important}
+  body{background:#fff!important;color:#000!important}
+  .print-report{display:block!important}
+  .no-print{display:none!important}
+  .round-block{page-break-inside:avoid;border:1px solid #ccc;border-radius:8px;padding:12px;margin-bottom:12px}
+}
+.print-report{display:none}
+/* ── ROUND BLOCK ── */
+.round-block{background:var(--card2);border:1px solid rgba(255,255,255,.07);border-radius:11px;padding:14px;margin-bottom:12px}
+.round-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,.06)}
+.attack-row{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;margin-bottom:4px;font-size:12px}
+.attack-hit{background:rgba(46,204,113,.07);border-right:3px solid var(--green)}
+.attack-miss{background:rgba(230,57,80,.07);border-right:3px solid var(--red)}
+.attack-inactive{background:rgba(122,116,160,.07);border-right:3px solid var(--muted)}
 .flex{display:flex}.ic{align-items:center}.jb{justify-content:space-between}
 .mt2{margin-top:8px}.mt3{margin-top:12px}.mb2{margin-bottom:8px}
 .muted{color:var(--muted)}.bold{font-weight:700}
@@ -1595,38 +1611,8 @@ export default function App() {
 
         {/* ══ تبويب المشرف السري ══ */}
         {statsTab==='admin_d'&&role==='admin'&&<>
-          <div style={{fontSize:11,color:'var(--gold)',fontWeight:700,marginBottom:10}}>🕵️ سجل كامل — للمشرف فقط</div>
-          {/* إحصائيات كل لاعب */}
-          {playersList.map(p=>{
-            const myAtks=allAttacksFlat.filter(a=>a.attackerNick===p.nick);
-            const myHits=myAtks.filter(a=>a.correct);
-            const tgtd=allAttacksFlat.filter(a=>a.realOwnerId===p.id);
-            const guessed=allAttacksFlat.filter(a=>a.guessedId===p.id);
-            return(
-              <div key={p.id} className="card">
-                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:9}}>
-                  <Av p={p} sz={33} fs={12}/>
-                  <div style={{flex:1}}>
-                    <div style={{fontWeight:700,fontSize:13}}>{p.name}</div>
-                    <div style={{fontSize:11,color:'var(--gold)'}}>{p.nick}{p.nick2?` · ${p.nick2}`:''}</div>
-                  </div>
-                  <div>{p.status==='active'?<span className="badge bvd">نشط</span>:p.status==='cheater'?<span className="badge brd">غش</span>:p.status==='inactive'?<span className="badge brd">خمول</span>:<span className="badge brd">خرج ج{p.eliminatedRound}</span>}</div>
-                </div>
-                <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:5}}>
-                  {[[myAtks.length,'هجماته','var(--gold)'],[myHits.length,'كشوفاته','var(--green)'],[tgtd.length,'انكشف','var(--red)'],[guessed.length,'استُهدف','var(--blue)']].map(([n,l,col],i)=>(
-                    <div key={i} style={{background:'#09091e',borderRadius:6,padding:'7px 4px',textAlign:'center'}}>
-                      <div style={{fontWeight:900,fontSize:16,color:col,fontFamily:'Cairo'}}>{n}</div>
-                      <div style={{color:'var(--muted)',fontSize:10}}>{l}</div>
-                    </div>
-                  ))}
-                </div>
-                {p.status!=='active'&&<div style={{marginTop:6,fontSize:11,color:'var(--muted)'}}>
-                  {p.eliminatedBy&&<>أخرجه: <span style={{color:'var(--gold)'}}>{p.eliminatedBy}</span> — </>}
-                  {p.eliminatedRound&&`جولة ${p.eliminatedRound}`}
-                </div>}
-              </div>
-            );
-          })}
+          <div style={{fontSize:11,color:'var(--gold)',fontWeight:700,marginBottom:12}}>🕵️ السجل الكامل — للمشرف فقط</div>
+          {renderFullLog(false)}
         </>}
       </div>
     );
@@ -1747,8 +1733,15 @@ export default function App() {
             })}
           </div>
 
+          {/* السجل الكامل للجميع عند النهاية */}
+          <div className="card" style={{marginTop:12}}>
+            <div className="ctitle">📜 تسلسل المسابقة الكامل</div>
+            <div style={{fontSize:11,color:'var(--muted)',marginBottom:10}}>كل ما حصل جولة بجولة — للجميع</div>
+            {renderFullLog(true)}
+          </div>
+
           <button className="btn bgh mt2" onClick={()=>setGameScreen('stats')}>📊 الإحصائيات التفصيلية</button>
-          {role==='admin'&&<button className="btn bgh mt2" onClick={exportPDF}>📄 تحميل التقرير الكامل</button>}
+          {role==='admin'&&<button className="btn bgh mt2" onClick={exportPDF}>📄 تحميل التقرير النصي</button>}
         </div>
       );
     }
@@ -1827,6 +1820,159 @@ export default function App() {
   );
 
   /* ══ MAIN ══ */
+  /* ══ FULL LOG RENDERER ══ */
+  const renderFullLog = (forEveryone=false) => {
+    if(allRoundsList.length===0) return(
+      <div style={{textAlign:'center',color:'var(--muted)',padding:24,fontSize:12}}>لا جولات منتهية بعد</div>
+    );
+    return(
+      <div id="full-log">
+        {/* ملخص سريع */}
+        <div className="sg sg4" style={{marginBottom:14}}>
+          <div className="sbox"><div className="snum">{allRoundsList.length}</div><div className="slbl">جولات</div></div>
+          <div className="sbox"><div className="snum">{allAttacksFlat.length}</div><div className="slbl">هجمات</div></div>
+          <div className="sbox"><div className="snum" style={{color:'var(--green)'}}>{allAttacksFlat.filter(a=>a.correct).length}</div><div className="slbl">إصابات</div></div>
+          <div className="sbox"><div className="snum" style={{color:'var(--red)'}}>{allAttacksFlat.filter(a=>!a.correct).length}</div><div className="slbl">فشل</div></div>
+        </div>
+
+        {/* جولة جولة */}
+        {allRoundsList.map((r,ri)=>{
+          const ratks = Object.values(r.attacks||{});
+          const hits  = ratks.filter(a=>a.correct);
+          const misses= ratks.filter(a=>!a.correct);
+
+          // Group misses by targetNick for compact display
+          const missMap={};
+          misses.forEach(a=>{ missMap[a.targetNick]=(missMap[a.targetNick]||0)+1; });
+
+          // Inactive players this round
+          const inactivePlayers = playersList.filter(p=>p.status==='inactive'&&p.eliminatedRound===r.round);
+          const cheaters = playersList.filter(p=>p.status==='cheater'&&p.eliminatedRound===r.round);
+
+          return(
+            <div key={ri} className="round-block">
+              {/* رأس الجولة */}
+              <div className="round-header">
+                <div style={{fontFamily:'Cairo',fontSize:15,fontWeight:900,color:'var(--gold)'}}>
+                  الجولة {r.round} {r.silent&&<span className="tag tb" style={{fontSize:10,marginRight:4}}>🤫 صمت</span>}
+                </div>
+                <div style={{display:'flex',gap:6}}>
+                  <span className="tag tb">{ratks.length} هجمة</span>
+                  <span className="tag tv">{hits.length} ✅</span>
+                  <span className="tag tr">{misses.length} ❌</span>
+                </div>
+              </div>
+
+              {/* الإصابات */}
+              {hits.length>0&&<>
+                <div style={{fontSize:11,color:'var(--green)',fontWeight:700,marginBottom:5}}>✅ الإصابات</div>
+                {/* Group hits by eliminated player */}
+                {[...new Set(hits.map(a=>a.realOwnerId))].map(eid=>{
+                  const victim = playersList.find(p=>p.id===eid);
+                  const whoHit = [...new Set(hits.filter(a=>a.realOwnerId===eid).map(a=>a.attackerNick))];
+                  return(
+                    <div key={eid} className="attack-row attack-hit">
+                      <span style={{fontSize:16}}>💥</span>
+                      <div style={{flex:1}}>
+                        <span style={{fontWeight:700,color:'var(--gold)'}}>"{victim?.nick}"</span>
+                        {!forEveryone&&<span style={{color:'var(--muted)',fontSize:11}}> ({victim?.name})</span>}
+                      </div>
+                      <span style={{color:'var(--green)',fontSize:11}}>
+                        كشفه: <strong>{whoHit.join(' + ')}</strong>
+                      </span>
+                    </div>
+                  );
+                })}
+              </>}
+
+              {/* الفشل */}
+              {misses.length>0&&<>
+                <div style={{fontSize:11,color:'var(--red)',fontWeight:700,marginBottom:5,marginTop:8}}>❌ الهجمات الخاطئة</div>
+                {Object.entries(missMap).sort((a,b)=>b[1]-a[1]).map(([nick,cnt])=>{
+                  const isElim = playersList.find(p=>p.nick===nick||p.nick2===nick)?.status!=='active';
+                  return(
+                    <div key={nick} className="attack-row attack-miss">
+                      <span style={{fontSize:14}}>🎯</span>
+                      <div style={{flex:1}}>
+                        <span style={{fontWeight:700,color:'var(--text)'}}>"{nick}"</span>
+                        {isElim&&<span className="tag tr" style={{fontSize:9,marginRight:5}}>خرج</span>}
+                      </div>
+                      <span style={{color:'var(--muted)',fontSize:11}}>{cnt} محاولة فاشلة</span>
+                    </div>
+                  );
+                })}
+              </>}
+
+              {/* خمول وغش */}
+              {(inactivePlayers.length>0||cheaters.length>0)&&<>
+                <div style={{fontSize:11,color:'var(--muted)',fontWeight:700,marginBottom:5,marginTop:8}}>⚠️ أخرى</div>
+                {inactivePlayers.map(p=>(
+                  <div key={p.id} className="attack-row attack-inactive">
+                    <span>😴</span>
+                    <span style={{flex:1}}>{p.name}</span>
+                    <span style={{color:'var(--muted)',fontSize:11}}>خرج لعدم الهجوم</span>
+                  </div>
+                ))}
+                {cheaters.map(p=>(
+                  <div key={p.id} className="attack-row" style={{background:'rgba(230,57,80,.07)',borderRight:'3px solid var(--red)'}}>
+                    <span>🚫</span>
+                    <span style={{flex:1}}>{p.name}</span>
+                    <span style={{color:'var(--red)',fontSize:11}}>أُخرج بسبب الغش</span>
+                  </div>
+                ))}
+              </>}
+            </div>
+          );
+        })}
+
+        {/* زر الطباعة */}
+        <button className="btn bo no-print" style={{marginTop:8}} onClick={()=>{
+          const el=document.getElementById('full-log');
+          if(!el) return;
+          const w=window.open('','_blank');
+          w.document.write(`<html dir="rtl"><head><title>تقرير لعبة الألقاب</title>
+          <style>body{font-family:Arial,sans-serif;direction:rtl;padding:20px;color:#111}
+          .round-block{border:1px solid #ddd;border-radius:8px;padding:12px;margin-bottom:14px;page-break-inside:avoid}
+          .round-header{display:flex;justify-content:space-between;border-bottom:1px solid #eee;padding-bottom:8px;margin-bottom:10px}
+          .attack-row{display:flex;gap:8px;padding:6px 10px;border-radius:6px;margin-bottom:4px;font-size:13px;border-right:3px solid #ccc}
+          .hit{background:#f0fff4;border-color:#2ecc71}.miss{background:#fff5f5;border-color:#e63950}
+          .tag{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;margin:0 2px}
+          .gold{color:#b8860b;font-weight:700}.green{color:#1a7a40;font-weight:700}.red{color:#a82020;font-weight:700}
+          h2{color:#b8860b;margin:0 0 4px}</style></head><body>`);
+          allRoundsList.forEach(r=>{
+            const ratks=Object.values(r.attacks||{});
+            const hits=ratks.filter(a=>a.correct);
+            const misses=ratks.filter(a=>!a.correct);
+            const missMap={};misses.forEach(a=>{missMap[a.targetNick]=(missMap[a.targetNick]||0)+1;});
+            w.document.write(`<div class="round-block">
+              <div class="round-header"><h2>الجولة ${r.round}${r.silent?' 🤫':''}</h2>
+              <span>${ratks.length} هجمة | ${hits.length} ✅ | ${misses.length} ❌</span></div>`);
+            if(hits.length>0){
+              w.document.write('<div style="font-weight:700;color:#1a7a40;margin-bottom:6px">✅ الإصابات</div>');
+              [...new Set(hits.map(a=>a.realOwnerId))].forEach(eid=>{
+                const v=playersList.find(p=>p.id===eid);
+                const who=[...new Set(hits.filter(a=>a.realOwnerId===eid).map(a=>a.attackerNick))];
+                w.document.write(`<div class="attack-row hit">💥 <span class="gold">"${v?.nick}"</span> (${v?.name}) — كشفه: <strong class="green">${who.join(' + ')}</strong></div>`);
+              });
+            }
+            if(Object.keys(missMap).length>0){
+              w.document.write('<div style="font-weight:700;color:#a82020;margin:8px 0 6px">❌ الهجمات الخاطئة</div>');
+              Object.entries(missMap).sort((a,b)=>b[1]-a[1]).forEach(([nick,cnt])=>{
+                w.document.write(`<div class="attack-row miss">🎯 <span class="gold">"${nick}"</span> — ${cnt} محاولة فاشلة</div>`);
+              });
+            }
+            w.document.write('</div>');
+          });
+          w.document.write('</body></html>');
+          w.document.close();
+          w.print();
+        }}>
+          🖨️ طباعة / حفظ كـ PDF
+        </button>
+      </div>
+    );
+  };
+
   /* ══ PDF REPORT EXPORT ══ */
   const exportPDF = () => {
     const lines = [];
