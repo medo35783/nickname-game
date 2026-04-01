@@ -1314,28 +1314,20 @@ export default function App() {
         <div className="scr">
           <div className="ptitle">🔓 كُشفت النتائج!</div>
           <div className="psub">الجولة {roundNum} — للجميع في نفس اللحظة</div>
+
+          {/* أرقام الجولة فقط */}
           <div className="sg sg3">
             <div className="sbox"><div className="snum">{atks.length}</div><div className="slbl">هجمات</div></div>
             <div className="sbox"><div className="snum" style={{color:'var(--green)'}}>{correct.length}</div><div className="slbl">إصابات ✅</div></div>
             <div className="sbox"><div className="snum" style={{color:'var(--red)'}}>{wrong.length}</div><div className="slbl">فشل ❌</div></div>
           </div>
 
-          {/* إحصائيات إثارة — عامة */}
-          <div className="sg">
-            {mh&&<div className="hunted"><div style={{fontSize:10,color:'var(--muted)',marginBottom:2}}>🔥 أكثر لقب مطاردة</div><div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:'var(--gold)'}}>{mh.nick}</div><div style={{fontSize:10,color:'var(--muted)'}}>{mh.count} هجمة</div></div>}
-            {lh&&<div className="hunted least"><div style={{fontSize:10,color:'var(--muted)',marginBottom:2}}>🛡️ أقل لقب استهدافاً</div><div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:'var(--blue)'}}>{lh.nick}</div><div style={{fontSize:10,color:'var(--muted)'}}>{lh.count} هجمة</div></div>}
-          </div>
-          <div className="sg">
-            {mt&&<div className="card2" style={{marginBottom:0,textAlign:'center'}}><div style={{fontSize:10,color:'var(--muted)',marginBottom:2}}>🎯 أكثر مستهدفاً</div><div style={{fontWeight:700,fontSize:14}}>{mt.name}</div><div style={{fontSize:10,color:'var(--muted)'}}>{mt.count} محاولة</div></div>}
-            {lt&&<div className="card2" style={{marginBottom:0,textAlign:'center'}}><div style={{fontSize:10,color:'var(--muted)',marginBottom:2}}>👻 أقل استهدافاً</div><div style={{fontWeight:700,fontSize:14}}>{lt.name}</div><div style={{fontSize:10,color:'var(--muted)'}}>{lt.count} محاولة</div></div>}
-          </div>
-
-          {Object.keys(flipCards).length>0&&<div className="card" style={{marginTop:10}}>
+          {/* بطاقات الكشف فقط */}
+          {Object.keys(flipCards).length>0&&<div className="card">
             <div className="ctitle">💥 كُشفت الهويات — اضغط البطاقة للكشف</div>
             {[...new Set(atks.filter(a=>a.correct).map(a=>a.realOwnerId))].map((elimId,i)=>{
               const elim=playersList.find(p=>p.id===elimId);
               if(!elim) return null;
-              // Collect all attackers who got this player
               const allAttackers=[...new Set(atks.filter(a=>a.correct&&a.realOwnerId===elimId).map(a=>a.attackerNick))];
               const flipped=flipCards[elim.nick]||false;
               return(
@@ -1363,28 +1355,15 @@ export default function App() {
             })}
           </div>}
 
-          {Object.keys(nickStats).length>0&&<div className="card">
-            <div className="ctitle">📋 تقرير الألقاب</div>
-            {Object.entries(nickStats).sort((a,b)=>b[1].total-a[1].total).map(([nick,st])=>(
-              <div key={nick} style={{display:'flex',alignItems:'center',gap:7,padding:'7px 10px',background:'#09091e',borderRadius:8,marginBottom:4,fontSize:12}}>
-                <div style={{fontWeight:700,flex:1}}>{nick}</div>
-                <div className="tag tb">{st.total} هجمة</div>
-                {st.suc>0?<div className="tag tv">✅ كُشف</div>:<div className="tag tm">صامد</div>}
-              </div>
-            ))}
+          {/* لا يوجد خارجون */}
+          {correct.length===0&&<div style={{textAlign:'center',padding:'16px 0',fontSize:13,color:'var(--green)'}}>
+            ✅ لم يُكشف أحد هذه الجولة!
           </div>}
 
-          <div className="card">
-            <div className="ctitle">👥 المتبقون ({activePlayers.length})</div>
-            {activePlayers.map(p=>(
-              <div key={p.id} className="pi"><Av p={p}/>
-                <div className="pi-info"><div className="pi-name">{p.name}</div><div className="pi-sub" style={{color:'var(--muted)'}}>لقبه مخفي 🔒</div></div>
-                {role==='admin'&&<button className="btn br bxs" onClick={()=>elimCheat(p.id)}>غش</button>}
-              </div>
-            ))}
-          </div>
-
-          {role==='admin'&&(activePlayers.length<=1?<button className="btn bg" onClick={endGame}>🏆 إعلان الفائز</button>:<button className="btn bg" onClick={nextRound}>▶️ الجولة {roundNum+1}</button>)}
+          {role==='admin'&&(activePlayers.length<=1
+            ?<button className="btn bg" onClick={endGame}>🏆 إعلان الفائز</button>
+            :<button className="btn bg" onClick={nextRound}>▶️ الجولة {roundNum+1}</button>
+          )}
           <button className="btn bgh mt2" onClick={()=>setGameScreen('stats')}>📊 الإحصائيات</button>
         </div>
       );
@@ -1394,7 +1373,7 @@ export default function App() {
     if(gameScreen==='stats') return(
       <div className="scr">
         <button className="btn bgh bsm" style={{width:'auto',marginBottom:12}} onClick={()=>setGameScreen('attack')}>← رجوع</button>
-        <div className="tabs">{[['round','الجولة الحالية'],['heat','كامل الجولات'],['admin_d','🕵️']].map(([k,l])=>(
+        <div className="tabs">{[['round','الجولة الحالية'],['heat','كامل الجولات'],['remaining','المتبقون'],['admin_d','🕵️']].map(([k,l])=>(
           <button key={k} className={`tab${statsTab===k?' on':''}`}
             onClick={()=>{if(k==='admin_d'&&role!=='admin'){notify('للمشرف فقط','error');return;}setStatsTab(k);}}>
             {l}
@@ -1431,7 +1410,7 @@ export default function App() {
             ):sorted.map(([nick,count],i)=>(
               <div key={nick} style={{marginBottom:8,maxWidth:'100%',overflow:'hidden'}}>
                 <div style={{display:'flex',justifyContent:'space-between',marginBottom:3,gap:8}}>
-                  <span style={{fontWeight:700,fontSize:13,color:i===0?'var(--red)':i===1?'var(--gold)':'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'60%'}}>{i+1}. {nick}</span>
+                  <span style={{fontWeight:700,fontSize:13,color:i===0?'var(--red)':i===1?'var(--gold)':'var(--text)'}}>{i+1}. {nick}</span>
                   <span style={{fontSize:12,color:'var(--muted)'}}>{count} هجمة</span>
                 </div>
                 <div style={{height:6,background:'rgba(255,255,255,.06)',borderRadius:3,overflow:'hidden'}}>
@@ -1451,7 +1430,7 @@ export default function App() {
             ):sorted.map(([name,count],i)=>(
               <div key={name} style={{marginBottom:8,maxWidth:'100%',overflow:'hidden'}}>
                 <div style={{display:'flex',justifyContent:'space-between',marginBottom:3,gap:8}}>
-                  <span style={{fontWeight:700,fontSize:13,color:i===0?'var(--red)':i===1?'var(--gold)':'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'60%'}}>{i+1}. {name}</span>
+                  <span style={{fontWeight:700,fontSize:13,color:i===0?'var(--red)':i===1?'var(--gold)':'var(--text)'}}>{i+1}. {name}</span>
                   <span style={{fontSize:12,color:'var(--muted)'}}>{count} محاولة</span>
                 </div>
                 <div style={{height:6,background:'rgba(255,255,255,.06)',borderRadius:3,overflow:'hidden'}}>
@@ -1492,7 +1471,7 @@ export default function App() {
                 <div key={nick} style={{marginBottom:8}}>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
                     <div style={{display:'flex',alignItems:'center',gap:8}}>
-                      <div style={{fontFamily:'Cairo',fontSize:13,fontWeight:700,color:i===0?'var(--red)':i===1?'var(--gold)':i===2?'var(--blue)':'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'60%'}}>
+                      <div style={{fontFamily:'Cairo',fontSize:13,fontWeight:700,color:i===0?'var(--red)':i===1?'var(--gold)':i===2?'var(--blue)':'var(--text)'}}>
                         {i+1}. {nick}
                       </div>
                       {isElim&&<span className="tag tr" style={{fontSize:9}}>خرج</span>}
@@ -1519,7 +1498,7 @@ export default function App() {
               return(
                 <div key={name} style={{marginBottom:8}}>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
-                    <div style={{fontWeight:700,fontSize:13,color:i===0?'var(--red)':i===1?'var(--gold)':i===2?'var(--blue)':'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'60%'}}>
+                    <div style={{fontWeight:700,fontSize:13,color:i===0?'var(--red)':i===1?'var(--gold)':i===2?'var(--blue)':'var(--text)'}}>
                       {i+1}. {name}
                     </div>
                     <div style={{fontSize:12,color:'var(--muted)'}}>{count} محاولة</div>
@@ -1568,6 +1547,50 @@ export default function App() {
             );
           })}
           {allRoundsList.length===0&&<div style={{textAlign:'center',color:'var(--muted)',padding:28,fontSize:12}}>لا جولات منتهية بعد</div>}
+        </>}
+
+        {/* ══ تبويب المتبقون ══ */}
+        {statsTab==='remaining'&&<>
+          <div style={{fontSize:12,color:'var(--muted)',marginBottom:12,textAlign:'center'}}>
+            اللاعبون النشطون — ألقابهم مخفية حتى النهاية 🔒
+          </div>
+          <div className="sg sg3" style={{marginBottom:14}}>
+            <div className="sbox"><div className="snum" style={{color:'var(--green)'}}>{activePlayers.length}</div><div className="slbl">نشطون</div></div>
+            <div className="sbox"><div className="snum" style={{color:'var(--red)'}}>{elimPlayers.length}</div><div className="slbl">خارجون</div></div>
+            <div className="sbox"><div className="snum">{playersList.length}</div><div className="slbl">الكل</div></div>
+          </div>
+
+          {/* النشطون */}
+          <div className="ctitle" style={{marginBottom:8}}>✅ ما زالوا في اللعبة</div>
+          {activePlayers.length===0
+            ?<div style={{textAlign:'center',color:'var(--muted)',padding:16,fontSize:12}}>لا يوجد لاعبون نشطون</div>
+            :activePlayers.map((p,i)=>(
+            <div key={p.id} className="pi" style={{marginBottom:5}}>
+              <div style={{width:28,height:28,borderRadius:'50%',background:'linear-gradient(135deg,var(--green),#1a8a50)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:900,color:'#07070f',flexShrink:0}}>{i+1}</div>
+              <Av p={p} sz={32} fs={12}/>
+              <div className="pi-info">
+                <div className="pi-name">{p.name}</div>
+                <div className="pi-sub" style={{color:'var(--green)'}}>لقبه مخفي 🔒</div>
+              </div>
+              {role==='admin'&&<span style={{fontSize:11,color:'var(--gold)'}}>{p.nick}</span>}
+            </div>
+          ))}
+
+          {/* المقبرة */}
+          {elimPlayers.length>0&&<>
+            <div className="ctitle" style={{marginBottom:8,marginTop:14}}>⚰️ مقبرة الألقاب</div>
+            {[...elimPlayers].sort((a,b)=>(b.eliminatedRound||0)-(a.eliminatedRound||0)).map(p=>(
+              <div key={p.id} className="grave">
+                <div className="grave-name">{p.name}</div>
+                {p.status==='eliminated'&&<div className="grave-nick">"{p.nick}"{p.nick2?` / "${p.nick2}"`:''}</div>}
+                <div className="grave-info">
+                  {p.status==='cheater'?'🚫 خرج من المسابقة':
+                   p.status==='inactive'?`😴 خرج لعدم الهجوم — ج${p.eliminatedRound}`:
+                   `💥 خرج ج${p.eliminatedRound}${p.eliminatedBy?` — كشفه: ${p.eliminatedBy}`:''}`}
+                </div>
+              </div>
+            ))}
+          </>}
         </>}
 
         {/* ══ تبويب المشرف السري ══ */}
