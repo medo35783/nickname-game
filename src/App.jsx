@@ -1838,15 +1838,9 @@ export default function App() {
 
         {/* جولة جولة */}
         {allRoundsList.map((r,ri)=>{
-          const ratks = Object.values(r.attacks||{});
+          const ratks = Object.values(r.attacks||{}).sort((a,b)=>a.time-b.time);
           const hits  = ratks.filter(a=>a.correct);
           const misses= ratks.filter(a=>!a.correct);
-
-          // Group misses by targetNick for compact display
-          const missMap={};
-          misses.forEach(a=>{ missMap[a.targetNick]=(missMap[a.targetNick]||0)+1; });
-
-          // Inactive players this round
           const inactivePlayers = playersList.filter(p=>p.status==='inactive'&&p.eliminatedRound===r.round);
           const cheaters = playersList.filter(p=>p.status==='cheater'&&p.eliminatedRound===r.round);
 
@@ -1864,64 +1858,74 @@ export default function App() {
                 </div>
               </div>
 
-              {/* الإصابات */}
+              {/* ✅ الإصابات — مفصلة */}
               {hits.length>0&&<>
-                <div style={{fontSize:11,color:'var(--green)',fontWeight:700,marginBottom:5}}>✅ الإصابات</div>
-                {/* Group hits by eliminated player */}
-                {[...new Set(hits.map(a=>a.realOwnerId))].map(eid=>{
-                  const victim = playersList.find(p=>p.id===eid);
-                  const whoHit = [...new Set(hits.filter(a=>a.realOwnerId===eid).map(a=>a.attackerNick))];
+                <div style={{fontSize:11,color:'var(--green)',fontWeight:700,marginBottom:6}}>✅ الإصابات</div>
+                {hits.map((a,i)=>{
+                  const victim = playersList.find(p=>p.id===a.realOwnerId);
                   return(
-                    <div key={eid} className="attack-row attack-hit">
-                      <span style={{fontSize:16}}>💥</span>
-                      <div style={{flex:1}}>
-                        <span style={{fontWeight:700,color:'var(--gold)'}}>"{victim?.nick}"</span>
-                        {!forEveryone&&<span style={{color:'var(--muted)',fontSize:11}}> ({victim?.name})</span>}
+                    <div key={i} className="attack-row attack-hit" style={{flexDirection:'column',alignItems:'flex-start',gap:4}}>
+                      <div style={{display:'flex',alignItems:'center',gap:6,width:'100%'}}>
+                        <span style={{fontSize:14}}>💥</span>
+                        <span style={{fontWeight:700,color:'var(--gold)'}}>"{a.attackerNick}"</span>
+                        <span style={{color:'var(--muted)',fontSize:11}}>هاجم</span>
+                        <span style={{fontWeight:700,color:'var(--text)'}}>"{a.targetNick}"</span>
+                        <span className="tag tv" style={{marginRight:'auto',fontSize:9}}>✅ صح</span>
                       </div>
-                      <span style={{color:'var(--green)',fontSize:11}}>
-                        كشفه: <strong>{whoHit.join(' + ')}</strong>
-                      </span>
+                      <div style={{fontSize:11,color:'var(--muted)',paddingRight:20}}>
+                        خمّن: <strong style={{color:'var(--text)'}}>{a.guessedName}</strong>
+                        {!forEveryone&&<> — الحقيقي: <strong style={{color:'var(--gold)'}}>{victim?.name} ({victim?.nick})</strong></>}
+                      </div>
                     </div>
                   );
                 })}
               </>}
 
-              {/* الفشل */}
+              {/* ❌ الهجمات الخاطئة — مفصلة */}
               {misses.length>0&&<>
-                <div style={{fontSize:11,color:'var(--red)',fontWeight:700,marginBottom:5,marginTop:8}}>❌ الهجمات الخاطئة</div>
-                {Object.entries(missMap).sort((a,b)=>b[1]-a[1]).map(([nick,cnt])=>{
-                  const isElim = playersList.find(p=>p.nick===nick||p.nick2===nick)?.status!=='active';
+                <div style={{fontSize:11,color:'var(--red)',fontWeight:700,marginBottom:6,marginTop:10}}>❌ الهجمات الخاطئة</div>
+                {misses.map((a,i)=>{
+                  const realOwner = playersList.find(p=>p.id===a.realOwnerId);
                   return(
-                    <div key={nick} className="attack-row attack-miss">
-                      <span style={{fontSize:14}}>🎯</span>
-                      <div style={{flex:1}}>
-                        <span style={{fontWeight:700,color:'var(--text)'}}>"{nick}"</span>
-                        {isElim&&<span className="tag tr" style={{fontSize:9,marginRight:5}}>خرج</span>}
+                    <div key={i} className="attack-row attack-miss" style={{flexDirection:'column',alignItems:'flex-start',gap:4}}>
+                      <div style={{display:'flex',alignItems:'center',gap:6,width:'100%'}}>
+                        <span style={{fontSize:14}}>🎯</span>
+                        <span style={{fontWeight:700,color:'var(--gold)'}}>"{a.attackerNick}"</span>
+                        <span style={{color:'var(--muted)',fontSize:11}}>هاجم</span>
+                        <span style={{fontWeight:700,color:'var(--text)'}}>"{a.targetNick}"</span>
+                        <span className="tag tr" style={{marginRight:'auto',fontSize:9}}>❌ خطأ</span>
                       </div>
-                      <span style={{color:'var(--muted)',fontSize:11}}>{cnt} محاولة فاشلة</span>
+                      <div style={{fontSize:11,color:'var(--muted)',paddingRight:20}}>
+                        خمّن: <strong style={{color:'var(--red)'}}>{a.guessedName}</strong>
+                        {!forEveryone&&realOwner&&<> — الحقيقي: <strong style={{color:'var(--gold)'}}>{realOwner.name} ({realOwner.nick})</strong></>}
+                      </div>
                     </div>
                   );
                 })}
               </>}
 
-              {/* خمول وغش */}
+              {/* ⚠️ خمول وغش */}
               {(inactivePlayers.length>0||cheaters.length>0)&&<>
-                <div style={{fontSize:11,color:'var(--muted)',fontWeight:700,marginBottom:5,marginTop:8}}>⚠️ أخرى</div>
+                <div style={{fontSize:11,color:'var(--muted)',fontWeight:700,marginBottom:5,marginTop:10}}>⚠️ أخرى</div>
                 {inactivePlayers.map(p=>(
                   <div key={p.id} className="attack-row attack-inactive">
                     <span>😴</span>
-                    <span style={{flex:1}}>{p.name}</span>
-                    <span style={{color:'var(--muted)',fontSize:11}}>خرج لعدم الهجوم</span>
+                    <span style={{flex:1,fontWeight:700}}>{p.name}</span>
+                    <span style={{color:'var(--muted)',fontSize:11}}>خرج لعدم الهجوم جولتين</span>
                   </div>
                 ))}
                 {cheaters.map(p=>(
                   <div key={p.id} className="attack-row" style={{background:'rgba(230,57,80,.07)',borderRight:'3px solid var(--red)'}}>
                     <span>🚫</span>
-                    <span style={{flex:1}}>{p.name}</span>
+                    <span style={{flex:1,fontWeight:700}}>{p.name}</span>
                     <span style={{color:'var(--red)',fontSize:11}}>أُخرج بسبب الغش</span>
                   </div>
                 ))}
               </>}
+
+              {ratks.length===0&&inactivePlayers.length===0&&cheaters.length===0&&(
+                <div style={{fontSize:11,color:'var(--muted)',textAlign:'center',padding:'8px 0'}}>لا أحداث في هذه الجولة</div>
+              )}
             </div>
           );
         })}
@@ -1950,16 +1954,16 @@ export default function App() {
               <span>${ratks.length} هجمة | ${hits.length} ✅ | ${misses.length} ❌</span></div>`);
             if(hits.length>0){
               w.document.write('<div style="font-weight:700;color:#1a7a40;margin-bottom:6px">✅ الإصابات</div>');
-              [...new Set(hits.map(a=>a.realOwnerId))].forEach(eid=>{
-                const v=playersList.find(p=>p.id===eid);
-                const who=[...new Set(hits.filter(a=>a.realOwnerId===eid).map(a=>a.attackerNick))];
-                w.document.write(`<div class="attack-row hit">💥 <span class="gold">"${v?.nick}"</span> (${v?.name}) — كشفه: <strong class="green">${who.join(' + ')}</strong></div>`);
+              hits.forEach(a=>{
+                const v=playersList.find(p=>p.id===a.realOwnerId);
+                w.document.write(`<div class="attack-row hit">💥 <span class="gold">"${a.attackerNick}"</span> هاجم <span class="gold">"${a.targetNick}"</span> — خمّن: <strong>${a.guessedName}</strong> — الحقيقي: <strong class="green">${v?.name} (${v?.nick})</strong></div>`);
               });
             }
-            if(Object.keys(missMap).length>0){
+            if(misses.length>0){
               w.document.write('<div style="font-weight:700;color:#a82020;margin:8px 0 6px">❌ الهجمات الخاطئة</div>');
-              Object.entries(missMap).sort((a,b)=>b[1]-a[1]).forEach(([nick,cnt])=>{
-                w.document.write(`<div class="attack-row miss">🎯 <span class="gold">"${nick}"</span> — ${cnt} محاولة فاشلة</div>`);
+              misses.forEach(a=>{
+                const ro=playersList.find(p=>p.id===a.realOwnerId);
+                w.document.write(`<div class="attack-row miss">🎯 <span class="gold">"${a.attackerNick}"</span> هاجم <span class="gold">"${a.targetNick}"</span> — خمّن: <span class="red">${a.guessedName}</span> — الحقيقي: <strong>${ro?.name} (${ro?.nick})</strong></div>`);
               });
             }
             w.document.write('</div>');
