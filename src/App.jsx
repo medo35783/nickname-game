@@ -673,6 +673,11 @@ export default function App() {
       notify('❌ لا يمكنك تخمين نفسك!','error');
       return;
     }
+    // Also block if myId matches guessedId directly
+    if(myId && myGuess===myId){
+      notify('❌ لا يمكنك تخمين نفسك!','error');
+      return;
+    }
 
     // Block double submit in same round
     const alreadyAttacked = Object.values(attacks||{}).some(a=>a.attackerNick===attackerNick);
@@ -1018,7 +1023,7 @@ export default function App() {
           <div className="ctitle">👥 المسجلون ({playersList.length})</div>
           <div className="sc">{playersList.map(p=>(
             <div key={p.id} className="pi"><Av p={p}/>
-              <div className="pi-info"><div className="pi-name">{p.name}</div><div className="pi-nick">{p.nick}{p.nick2?` · ${p.nick2}`:''}</div></div>
+              <div className="pi-info"><div className="pi-name">{p.name}</div><div className="pi-nick">"{p.nick}"{p.nick2?<span style={{color:'rgba(240,192,64,.6)'}}> · "{p.nick2}"</span>:''}</div></div>
               <button className="btn bgh bxs" onClick={async()=>{await set(ref(db,`rooms/${roomCode}/players/${p.id}`),null);}}>✕</button>
             </div>
           ))}</div>
@@ -1198,17 +1203,16 @@ export default function App() {
               {[...elimPlayers].sort((a,b)=>(b.eliminatedRound||0)-(a.eliminatedRound||0)).map(p=>(
                 <div key={p.id} className="grave">
                   <div className="grave-name">{p.name}</div>
+                  {/* لقب المكشوف فقط — الخارج بالخمول لا يُظهر لقبه */}
                   {p.status==='eliminated'&&<div className="grave-nick">
-                    {/* Show only the nick that was actually targeted */}
                     {(()=>{
-                      const targetedNick = allAttacksFlat.find(a=>a.correct&&a.realOwnerId===p.id)?.targetNick;
-                      const shownNick = targetedNick||p.nick;
-                      const otherNick = p.nick2&&shownNick===p.nick?p.nick2:p.nick2&&shownNick===p.nick2?p.nick:null;
-                      // Only show the other nick if it was also targeted in a correct attack
-                      const otherTargeted = otherNick&&allAttacksFlat.some(a=>a.correct&&a.realOwnerId===p.id&&a.targetNick===otherNick);
-                      return <>"{shownNick}"{otherTargeted?` / "${otherNick}"`:''}</>;
+                      const targetedNick=allAttacksFlat.find(a=>a.correct&&a.realOwnerId===p.id)?.targetNick;
+                      const shownNick=targetedNick||p.nick;
+                      const otherTargeted=p.nick2&&allAttacksFlat.some(a=>a.correct&&a.realOwnerId===p.id&&a.targetNick===p.nick2);
+                      return <>"{shownNick}"{otherTargeted?` / "${p.nick2}"`:''}</>;
                     })()}
                   </div>}
+                  {/* الخارج بالخمول — اسم فقط بدون لقب */}
                   <div className="grave-info">
                     {p.status==='cheater'?'🚫 خرج من المسابقة':
                      p.status==='inactive'?`😴 خرج لعدم الهجوم — ج${p.eliminatedRound}`:
@@ -1317,19 +1321,20 @@ export default function App() {
               <button className="btn bv bsm mt2" style={{width:'100%'}} onClick={async()=>{
                 const sp=gameState.silentPending;
                 const updates={};
-                sp.exitList?.forEach(ex=>{
-                  const p=playersList.find(pl=>pl.nick===ex.nick);
+                // Apply the stored silent round exits
+                sp.silentExits?.forEach(ex=>{
+                  const p=playersList.find(pl=>pl.nick===ex.nick||pl.id===ex.playerId);
                   if(p){
                     updates[`rooms/${roomCode}/players/${p.id}/status`]=ex.inactive?'inactive':'eliminated';
-                    updates[`rooms/${roomCode}/players/${p.id}/eliminatedRound`]=sp.roundNum;
-                    updates[`rooms/${roomCode}/players/${p.id}/eliminatedBy`]=ex.eliminatedBy;
-                    sp.exitList.forEach(ex2=>{ playSound('explosion'); });
+                    updates[`rooms/${roomCode}/players/${p.id}/eliminatedRound`]=ex.roundNum;
+                    if(!ex.inactive) updates[`rooms/${roomCode}/players/${p.id}/eliminatedBy`]=ex.attackers?.join(' + ')||'لاعب';
                   }
                 });
-                updates[`rooms/${roomCode}/game/phase`]='revealing';
                 updates[`rooms/${roomCode}/game/silentPending`]=null;
+                updates[`rooms/${roomCode}/game/phase`]='revealing';
                 await update(ref(db),updates);
-                notify('🔓 تم كشف نتائج الجولة الصامتة!','gold');
+                playSound('suspense');
+                notify('🔓 كُشفت نتائج الجولة الصامتة!','gold');
               }}>🔓 كشف نتائج الجولة الصامتة الآن</button>
             )}
           </div>
@@ -1432,11 +1437,12 @@ export default function App() {
       const allNickSorted=nickHeatmapActive();
       const allNameSorted=nameHeatmapActive();
 
-      // ── الأشرس هجوماً ──
+      // ── الأشرس هجوماً — يجمع nick و nick2 ──
       const attackerRank=playersList.map(p=>{
-        const atks=allAttacksFlat.filter(a=>a.attackerNick===p.nick);
-        return{id:p.id,name:p.name,nick:p.nick,colorIdx:p.colorIdx,initials:p.initials,status:p.status,count:atks.length,hits:atks.filter(a=>a.correct).length};
-      }).filter(p=>p.count>0).sort((a,b)=>b.count-a.count);
+        const nicks=[p.nick,p.nick2].filter(Boolean);
+        const atks=allAttacksFlat.filter(a=>nicks.includes(a.attackerNick));
+        return{id:p.id,name:p.name,nick:p.nick,nick2:p.nick2,colorIdx:p.colorIdx,initials:p.initials,status:p.status,count:atks.length,hits:atks.filter(a=>a.correct).length};
+      }).filter(p=>p.count>0).sort((a,b)=>b.hits-a.hits||b.count-a.count);
 
       // ── إحصاءات اللاعب الحالي ──
       const myPlayer = playersList.find(p=>p.nick===myNickLocal);
@@ -1631,17 +1637,16 @@ export default function App() {
               {[...elimPlayers].sort((a,b)=>(b.eliminatedRound||0)-(a.eliminatedRound||0)).map(p=>(
                 <div key={p.id} className="grave">
                   <div className="grave-name">{p.name}</div>
+                  {/* لقب المكشوف فقط — الخارج بالخمول لا يُظهر لقبه */}
                   {p.status==='eliminated'&&<div className="grave-nick">
-                    {/* Show only the nick that was actually targeted */}
                     {(()=>{
-                      const targetedNick = allAttacksFlat.find(a=>a.correct&&a.realOwnerId===p.id)?.targetNick;
-                      const shownNick = targetedNick||p.nick;
-                      const otherNick = p.nick2&&shownNick===p.nick?p.nick2:p.nick2&&shownNick===p.nick2?p.nick:null;
-                      // Only show the other nick if it was also targeted in a correct attack
-                      const otherTargeted = otherNick&&allAttacksFlat.some(a=>a.correct&&a.realOwnerId===p.id&&a.targetNick===otherNick);
-                      return <>"{shownNick}"{otherTargeted?` / "${otherNick}"`:''}</>;
+                      const targetedNick=allAttacksFlat.find(a=>a.correct&&a.realOwnerId===p.id)?.targetNick;
+                      const shownNick=targetedNick||p.nick;
+                      const otherTargeted=p.nick2&&allAttacksFlat.some(a=>a.correct&&a.realOwnerId===p.id&&a.targetNick===p.nick2);
+                      return <>"{shownNick}"{otherTargeted?` / "${p.nick2}"`:''}</>;
                     })()}
                   </div>}
+                  {/* الخارج بالخمول — اسم فقط بدون لقب */}
                   <div className="grave-info">
                     {p.status==='cheater'?'🚫 خرج من المسابقة':
                      p.status==='inactive'?`😴 خرج لعدم الهجوم — ج${p.eliminatedRound}`:
@@ -1663,165 +1668,83 @@ export default function App() {
 
         /* ── WINNER ── */
     if(gameScreen==='winner'){
-      const sortedP=[...playersList].sort((a,b)=>{if(a.status==='active'&&b.status!=='active')return -1;if(a.status!=='active'&&b.status==='active')return 1;return(b.eliminatedRound||0)-(a.eliminatedRound||0);});
-      const totalCorrect=allAttacksFlat.filter(a=>a.correct).length;
-      const accuracy=allAttacksFlat.length>0?Math.round((totalCorrect/allAttacksFlat.length)*100):0;
-      const attackerMap={};allAttacksFlat.forEach(a=>{if(a.attackerNick&&a.correct)attackerMap[a.attackerNick]=(attackerMap[a.attackerNick]||0)+1;});
-      const topAttacker=Object.entries(attackerMap).sort((a,b)=>b[1]-a[1])[0];
-      const targetedMap={};allAttacksFlat.forEach(a=>{if(a.realOwnerId)targetedMap[a.realOwnerId]=(targetedMap[a.realOwnerId]||0)+1;});
-      const bestRound=allRoundsList.map(r=>({round:r.round,elim:Object.values(r.attacks||{}).filter(a=>a.correct).length})).sort((a,b)=>b.elim-a.elim)[0];
       const winners=activePlayers;
+      const sortedP=[...playersList].sort((a,b)=>{
+        if(a.status==='active'&&b.status!=='active')return -1;
+        if(a.status!=='active'&&b.status==='active')return 1;
+        return(b.eliminatedRound||0)-(a.eliminatedRound||0);
+      });
+      const totalCorrect=allAttacksFlat.filter(a=>a.correct).length;
+      const accuracy=allAttacksFlat.length>0?Math.round(totalCorrect/allAttacksFlat.length*100):0;
+
+      // الأشرس — لكل الجولات
+      const fierceAll=playersList.map(p=>{
+        const nicks=[p.nick,p.nick2].filter(Boolean);
+        const atks=allAttacksFlat.filter(a=>nicks.includes(a.attackerNick));
+        return{...p,count:atks.length,hits:atks.filter(a=>a.correct).length};
+      }).filter(p=>p.count>0).sort((a,b)=>b.hits-a.hits||b.count-a.count);
 
       return(
         <div className="scr">
           <div className="ptitle" style={{fontSize:25}}>🎉 انتهت المسابقة!</div>
-          <div className="psub">بعد {roundNum} جولة — تقرير مفصل بمسار اللعبة</div>
+          <div className="psub">بعد {roundNum} جولة</div>
 
+          {/* الفائزون */}
           {winners.map((w,i)=>(
-            <div key={w.id} className="wcard"><div className="wcrown">{i===0?'👑':'🥈'}</div>
+            <div key={w.id} className="wcard">
+              <div className="wcrown">{i===0?'👑':'🥈'}</div>
               <div style={{fontFamily:'Cairo',fontSize:20,fontWeight:900,color:'var(--gold)'}}>{w.name}</div>
-              <div style={{fontSize:13,color:'var(--text)',marginTop:3}}>"{w.nick}"</div>
-              {w.nick2&&<div style={{fontSize:11,color:'var(--muted)'}}>/ "{w.nick2}"</div>}
+              <div style={{fontSize:13,color:'var(--text)',marginTop:3}}>"{w.nick}"{w.nick2?<span style={{color:'rgba(240,192,64,.6)'}}> · "{w.nick2}"</span>:''}</div>
             </div>
           ))}
 
-          <div className="card">
-            <div className="ctitle">📊 ملخص المسابقة</div>
-            <div className="sg sg4">
-              <div className="sbox"><div className="snum">{roundNum}</div><div className="slbl">جولات</div></div>
-              <div className="sbox"><div className="snum">{allAttacksFlat.length}</div><div className="slbl">هجمات</div></div>
-              <div className="sbox"><div className="snum" style={{color:'var(--green)'}}>{totalCorrect}</div><div className="slbl">إصابات</div></div>
-              <div className="sbox"><div className="snum" style={{color:'var(--gold)'}}>{accuracy}%</div><div className="slbl">دقة</div></div>
-            </div>
+          {/* ملخص سريع */}
+          <div className="sg sg4" style={{marginBottom:12}}>
+            <div className="sbox"><div className="snum">{roundNum}</div><div className="slbl">جولات</div></div>
+            <div className="sbox"><div className="snum">{allAttacksFlat.length}</div><div className="slbl">هجمات</div></div>
+            <div className="sbox"><div className="snum" style={{color:'var(--green)'}}>{totalCorrect}</div><div className="slbl">إصابات</div></div>
+            <div className="sbox"><div className="snum" style={{color:'var(--gold)'}}>{accuracy}%</div><div className="slbl">دقة</div></div>
           </div>
 
-          <div className="card">
-            <div className="ctitle">🌟 أبرز اللحظات</div>
-            {topAttacker&&<div style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',background:'#09091e',borderRadius:9,marginBottom:6}}>
-              <div style={{fontSize:20}}>⚔️</div>
-              <div><div style={{fontSize:12,color:'var(--muted)'}}>المهاجم الأشرس</div>
-              <div style={{fontWeight:700,fontSize:14}}>{topAttacker[0]} <span style={{color:'var(--green)',fontSize:12}}>({topAttacker[1]} إصابة)</span></div></div>
-            </div>}
-            {bestRound&&bestRound.elim>0&&<div style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',background:'#09091e',borderRadius:9,marginBottom:6}}>
-              <div style={{fontSize:20}}>💥</div>
-              <div><div style={{fontSize:12,color:'var(--muted)'}}>الجولة الأكثر إثارةً</div>
-              <div style={{fontWeight:700,fontSize:14}}>الجولة {bestRound.round} <span style={{color:'var(--red)',fontSize:12}}>({bestRound.elim} كشف)</span></div></div>
-            </div>}
-          </div>
-
-          <div className="card">
-            <div className="ctitle">🗓️ مسار اللعبة جولة بجولة</div>
-            {allRoundsList.map((r,i)=>{
-              const ratks=Object.values(r.attacks||{});
-              const elims=ratks.filter(a=>a.correct);
-              const inactive=playersList.filter(p=>p.status==='inactive'&&p.eliminatedRound===r.round);
-              const cheaters=playersList.filter(p=>p.status==='cheater'&&p.eliminatedRound===r.round);
-              return(
-                <div key={i} style={{marginBottom:10,paddingBottom:10,borderBottom:'1px solid rgba(255,255,255,.05)'}}>
-                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
-                    <div style={{fontWeight:700,fontSize:13,color:'var(--gold)'}}>الجولة {r.round}</div>
-                    <div style={{display:'flex',gap:5}}><span className="tag tb">{ratks.length} هجمة</span><span className="tag tv">{elims.length} كشف</span></div>
-                  </div>
-                  {elims.length===0&&inactive.length===0&&cheaters.length===0&&<div style={{fontSize:11,color:'var(--muted)'}}>لم يخرج أحد هذه الجولة</div>}
-                  {elims.map((a,j)=>{const victim=playersList.find(p=>p.id===a.realOwnerId);return(
-                    <div key={j} style={{fontSize:12,padding:'5px 9px',background:'rgba(230,57,80,.07)',borderRadius:7,marginBottom:3,borderRight:'2px solid var(--red)'}}>
-                      💥 كُشف <strong>"{victim?.nick}"</strong> ({victim?.name}) — أخرجه <span style={{color:'var(--gold)'}}>{a.attackerNick}</span>
-                    </div>
-                  );})}
-                  {inactive.map((p,j)=><div key={j} style={{fontSize:12,padding:'5px 9px',background:'rgba(122,116,160,.07)',borderRadius:7,marginBottom:3,borderRight:'2px solid var(--muted)'}}>😴 خرج <strong>{p.name}</strong> لعدم الهجوم جولتين</div>)}
-                  {cheaters.map((p,j)=><div key={j} style={{fontSize:12,padding:'5px 9px',background:'rgba(230,57,80,.07)',borderRadius:7,marginBottom:3,borderRight:'2px solid var(--red)'}}>🚫 أُخرج <strong>{p.name}</strong> بسبب الغش</div>)}
+          {/* الأشرس — للجميع بالألقاب، للمشرف بالاسم+اللقب */}
+          {fierceAll.length>0&&<div className="card">
+            <div className="ctitle">⚔️ الأشرس هجوماً</div>
+            {fierceAll.map((p,i)=>(
+              <div key={p.id} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',background:'#09091e',borderRadius:9,marginBottom:5,border:`1px solid ${i===0?'rgba(240,192,64,.3)':i===1?'rgba(200,200,220,.15)':'rgba(255,255,255,.05)'}`}}>
+                <div style={{fontFamily:'Cairo',fontSize:15,fontWeight:900,width:24,color:i===0?'var(--gold)':i===1?'rgba(200,200,220,.8)':i===2?'var(--red)':'var(--muted)'}}>
+                  {i===0?'👑':i===1?'🥈':i===2?'🥉':i+1}
                 </div>
-              );
-            })}
-          </div>
-
-          <div className="card">
-            <div className="ctitle">🎭 الكشف الكامل — جميع الألقاب</div>
-            {sortedP.map(p=>(
-              <div key={p.id} className={`pi${p.status!=='active'?' dim':''}`}><Av p={p}/>
-                <div className="pi-info"><div className="pi-name">{p.name}</div><div className="pi-nick">{p.nick}{p.nick2?` · ${p.nick2}`:''}</div>
-                  {p.status!=='active'&&<div className="pi-sub">{p.status==='cheater'?'🚫 غش':p.status==='inactive'?`😴 خمول — ج${p.eliminatedRound}`:`💥 خرج ج${p.eliminatedRound}${p.eliminatedBy?` — أخرجه ${p.eliminatedBy}`:''}`}</div>}
+                <Av p={p} sz={30} fs={11}/>
+                <div style={{flex:1}}>
+                  {role==='admin'
+                    ?<><div style={{fontWeight:700,fontSize:13}}>{p.name}</div>
+                      <div style={{fontSize:11,color:'var(--gold)'}}>"{p.nick}"{p.nick2?` · "${p.nick2}"`:''}</div></>
+                    :<div style={{fontWeight:700,fontSize:13,color:'var(--gold)'}}>"{p.nick}"{p.nick2?` · "${p.nick2}"`:''}</div>
+                  }
                 </div>
-                <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
-                  {p.status==='active'?<span className="tag tg">🏆</span>:p.status==='cheater'?<span className="tag tr">🚫</span>:<span className="tag tm">ج{p.eliminatedRound}</span>}
-                  <span style={{fontSize:10,color:'var(--muted)'}}>{allAttacksFlat.filter(a=>a.realOwnerId===p.id).length} هجمة عليه</span>
+                <div style={{textAlign:'center',marginLeft:8}}>
+                  <div style={{fontFamily:'Cairo',fontSize:15,fontWeight:900,color:'var(--green)'}}>{p.hits}</div>
+                  <div style={{fontSize:9,color:'var(--muted)'}}>إصابة</div>
+                </div>
+                <div style={{textAlign:'center'}}>
+                  <div style={{fontFamily:'Cairo',fontSize:15,fontWeight:900,color:'var(--gold)'}}>{p.count}</div>
+                  <div style={{fontSize:9,color:'var(--muted)'}}>هجمة</div>
                 </div>
               </div>
             ))}
-          </div>
+          </div>}
 
-          <div className="card">
-            <div className="ctitle">📋 تقرير كل لاعب</div>
-            {sortedP.map(p=>{
-              const myAtks=allAttacksFlat.filter(a=>a.attackerNick===p.nick);
-              const myHits=myAtks.filter(a=>a.correct);
-              const timesTargeted=allAttacksFlat.filter(a=>a.realOwnerId===p.id).length;
-              const timesGuessed=allAttacksFlat.filter(a=>a.guessedId===p.id).length;
-              return(
-                <div key={p.id} style={{marginBottom:10,paddingBottom:10,borderBottom:'1px solid rgba(255,255,255,.05)'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:7}}>
-                    <Av p={p} sz={30} fs={11}/>
-                    <div style={{flex:1}}><div style={{fontWeight:700,fontSize:13}}>{p.name}</div><div style={{fontSize:11,color:'var(--gold)'}}>{p.nick}{p.nick2?` · ${p.nick2}`:''}</div></div>
-                    {p.status==='active'?<span className="badge bvd">فائز 🏆</span>:p.status==='cheater'?<span className="badge brd">غش</span>:p.status==='inactive'?<span className="badge brd">خمول</span>:<span className="badge brd">خرج ج{p.eliminatedRound}</span>}
-                  </div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:5}}>
-                    {[[myAtks.length,'هجماته','var(--gold)'],[myHits.length,'إصاباته','var(--green)'],[timesTargeted,'كُشف عنه','var(--red)'],[timesGuessed,'خُمّن هو','var(--blue)']].map(([n,l,col],i)=>(
-                      <div key={i} style={{background:'#09091e',borderRadius:6,padding:'6px 4px',textAlign:'center'}}>
-                        <div style={{fontWeight:900,fontSize:15,color:col,fontFamily:'Cairo'}}>{n}</div>
-                        <div style={{color:'var(--muted)',fontSize:9}}>{l}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* الأشرس هجوماً — بالألقاب فقط في النهاية */}
-          {(()=>{
-            const fierceRank = playersList.map(p=>{
-              const atks=allAttacksFlat.filter(a=>a.attackerNick===p.nick);
-              const hits=atks.filter(a=>a.correct);
-              return{nick:p.nick,colorIdx:p.colorIdx,initials:p.initials,status:p.status,count:atks.length,hits:hits.length};
-            }).filter(p=>p.count>0).sort((a,b)=>b.hits-a.hits||b.count-a.count);
-            if(fierceRank.length===0) return null;
-            return(
-              <div className="card" style={{marginTop:12}}>
-                <div className="ctitle">⚔️ الأشرس هجوماً</div>
-                <div style={{fontSize:11,color:'var(--muted)',marginBottom:10}}>الترتيب بعد انتهاء المسابقة — بالألقاب فقط</div>
-                {fierceRank.map((p,i)=>(
-                  <div key={p.nick} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',background:'#09091e',borderRadius:9,marginBottom:5,border:`1px solid ${i===0?'rgba(240,192,64,.3)':i===1?'rgba(200,200,220,.15)':'rgba(255,255,255,.05)'}`}}>
-                    <div style={{fontFamily:'Cairo',fontSize:16,fontWeight:900,width:26,textAlign:'center',color:i===0?'var(--gold)':i===1?'rgba(200,200,220,.8)':i===2?'var(--red)':'var(--muted)'}}>
-                      {i===0?'👑':i===1?'🥈':i===2?'🥉':i+1}
-                    </div>
-                    <div style={{flex:1}}>
-                      <div style={{fontWeight:700,fontSize:13,color:'var(--gold)'}}>"{p.nick}"</div>
-                    </div>
-                    <div style={{display:'flex',gap:12,alignItems:'center'}}>
-                      <div style={{textAlign:'center'}}>
-                        <div style={{fontFamily:'Cairo',fontSize:15,fontWeight:900,color:'var(--gold)'}}>{p.count}</div>
-                        <div style={{fontSize:9,color:'var(--muted)'}}>هجمة</div>
-                      </div>
-                      <div style={{textAlign:'center'}}>
-                        <div style={{fontFamily:'Cairo',fontSize:15,fontWeight:900,color:'var(--green)'}}>{p.hits}</div>
-                        <div style={{fontSize:9,color:'var(--muted)'}}>إصابة</div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            );
-          })()}
-
-          {/* السجل الكامل للجميع عند النهاية */}
+          {/* التقرير الكامل — للجميع عند النهاية */}
           <div className="card" style={{marginTop:12}}>
             <div className="ctitle">📜 تسلسل المسابقة الكامل</div>
-            <div style={{fontSize:11,color:'var(--muted)',marginBottom:10}}>كل ما حصل جولة بجولة — للجميع</div>
-            {renderFullLog(true)}
+            <div style={{fontSize:11,color:'var(--muted)',marginBottom:10}}>
+              {role==='admin'?'التقرير الكامل — الاسم واللقب والتفاصيل':'كل ما حصل جولة بجولة — بالألقاب فقط'}
+            </div>
+            {renderFullLog(role!=='admin')}
           </div>
 
-          <button className="btn bgh mt2" onClick={()=>setGameScreen('stats')}>📊 الإحصائيات التفصيلية</button>
-          {role==='admin'&&<button className="btn bgh mt2" onClick={exportPDF}>📄 تحميل التقرير النصي</button>}
+          <button className="btn bgh mt2" onClick={()=>setGameScreen('stats')}>📊 الإحصائيات</button>
+          {role==='admin'&&<button className="btn bgh mt2" onClick={exportPDF}>📄 تحميل التقرير</button>}
         </div>
       );
     }
