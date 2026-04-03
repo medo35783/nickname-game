@@ -236,11 +236,6 @@ textarea.inp{resize:vertical;min-height:80px}
 @keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
 
 /* ── LEADERBOARD ── */
-.lb-row{display:flex;align-items:center;gap:9px;padding:10px 12px;background:#09091e;border-radius:9px;margin-bottom:5px;border-right:3px solid transparent}
-.lb-1{border-color:var(--gold);background:rgba(240,192,64,.06)}
-.lb-2{border-color:rgba(200,200,220,.4)}
-.lb-3{border-color:rgba(230,57,80,.4)}
-.lb-rank{font-family:'Cairo',sans-serif;font-size:18px;font-weight:900;width:28px;text-align:center}
 
 /* ── POISON ── */
 .poison-badge{background:rgba(155,89,182,.15);border:1px solid rgba(155,89,182,.4);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--purple);display:flex;align-items:center;gap:7px;margin-bottom:10px}
@@ -327,7 +322,6 @@ export default function App() {
   const [pendingSilent, setPendingSilent] = useState(null); // stored silent round data
   const [exitAnnounce, setExitAnnounce] = useState(null);  // cinematic exit {nick,name,eliminatedBy}
   const [flipCards, setFlipCards]       = useState({});    // {nick: flipped bool}
-  const [showLeaderboard, setShowLeaderboard] = useState(false);
 
   /* ── REFS ── */
   const listenersRef = useRef([]);
@@ -673,8 +667,13 @@ export default function App() {
       notify('❌ لا يمكنك تخمين نفسك!','error');
       return;
     }
-    // Also block if myId matches guessedId directly
+    // منع تخمين نفسك بالاسم أو بالـ ID
+    const guessedP = playersList.find(p=>p.id===myGuess);
     if(myId && myGuess===myId){
+      notify('❌ لا يمكنك تخمين نفسك!','error');
+      return;
+    }
+    if(guessedP && joinName.trim() && guessedP.name?.trim()===joinName.trim()){
       notify('❌ لا يمكنك تخمين نفسك!','error');
       return;
     }
@@ -865,18 +864,7 @@ export default function App() {
   ════════════════════════════════════════════════ */
 
   /* ── LEADERBOARD DATA ── */
-  const getLeaderboard = () => {
-    return playersList.map(p=>{
-      const atks=allAttacksFlat.filter(a=>a.attackerNick===p.nick);
-      const hits=atks.filter(a=>a.correct);
-      const targeted=allAttacksFlat.filter(a=>a.realOwnerId===p.id).length;
-      // Score: each kill=3pts, each attack=1pt, survival bonus=5pts
-      const survivalBonus = p.status==='active'?5:0;
-      return { id:p.id, initials:p.initials, colorIdx:p.colorIdx, status:p.status,
-               attacks:atks.length, hits:hits.length, targeted,
-               score:hits.length*3+atks.length+survivalBonus };
-    }).sort((a,b)=>b.score-a.score);
-  };
+;
 
   // Heatmap — only players with at least 1 attack on them (fix least targeted)
   const nickHeatmapActive=()=>{
@@ -1041,7 +1029,10 @@ export default function App() {
 
     /* ── ATTACK ── */
     if(gameScreen==='attack'){
-      const displayNicks = roundOrder.nicks?.length>0 ? roundOrder.nicks : playersList.flatMap(p=>[p.nick,p.nick2].filter(Boolean));
+      // كل الألقاب — النشطون + الخارجون بالخمول (بدون ربط اسم)
+      const inactiveNicks = playersList.filter(p=>p.status==='inactive').flatMap(p=>[p.nick,p.nick2].filter(Boolean));
+      const baseNicks = roundOrder.nicks?.length>0 ? roundOrder.nicks : playersList.filter(p=>p.status==='active').flatMap(p=>[p.nick,p.nick2].filter(Boolean));
+      const displayNicks = [...new Set([...baseNicks, ...inactiveNicks])];
       const displayNames = roundOrder.names?.length>0 ? roundOrder.names.map(id=>playersList.find(p=>p.id===id)).filter(Boolean) : playersList;
       const proxyPlayer  = proxyFor ? playersList.find(p=>p.id===proxyFor) : null;
 
@@ -1076,7 +1067,31 @@ export default function App() {
           {silentRound&&(
             <div className="silent-badge">
               <span style={{fontSize:16}}>🤫</span>
-              <span><strong>جولة الصمت</strong> — النتائج لن تُكشف حتى يقرر المشرف</span>
+              <div style={{flex:1}}>
+                <strong>جولة الصمت مفعّلة</strong>
+                <div style={{fontSize:10,marginTop:2,opacity:.8}}>النتائج مخفية — اضغط الزر لبدء الجولة التالية سراً</div>
+              </div>
+              {role==='admin'&&<button className="btn bb bxs" onClick={async()=>{
+                // حفظ الجولة الحالية سراً والانتقال للتالية
+                const currentAtks = Object.values(attacks||{});
+                const seenIds=new Set();
+                const elimAtt={};
+                currentAtks.forEach(a=>{if(a.correct){if(!elimAtt[a.realOwnerId])elimAtt[a.realOwnerId]=[];elimAtt[a.realOwnerId].push(a.attackerNick);seenIds.add(a.realOwnerId);}});
+                const silentExits=playersList.filter(p=>seenIds.has(p.id)).map(p=>({playerId:p.id,nick:p.nick,nick2:p.nick2,name:p.name,attackers:elimAtt[p.id]||[],roundNum,initials:p.initials,colorIdx:p.colorIdx}));
+                const silentMissed=playersList.filter(p=>p.status==='active'&&!currentAtks.some(a=>a.attackerNick===p.nick)).map(p=>({playerId:p.id,missedRounds:(p.missedRounds||0)+1}));
+                const updates={};
+                updates[`rooms/${roomCode}/rounds/round_${roundNum}`]={round:roundNum,attacks:attacks||{},endedAt:Date.now(),silent:true};
+                const prev=gameState?.silentPending||{silentExits:[],silentMissed:[]};
+                updates[`rooms/${roomCode}/game/silentPending`]={
+                  silentExits:[...(prev.silentExits||[]),...silentExits],
+                  silentMissed:[...(prev.silentMissed||[]),...silentMissed],
+                  roundNum
+                };
+                setSilentRound(false);
+                await update(ref(db),updates);
+                await launchRound(roundNum+1);
+                notify('🤫 انتقلنا للجولة التالية — النتائج مخفية','info');
+              }}>⏭️ الجولة التالية</button>}
             </div>
           )}
 
@@ -1140,12 +1155,14 @@ export default function App() {
                 <div className="bgrid">
                   {displayNicks.map((nick,i)=>{
                     const owner=playersList.find(p=>p.nick===nick||p.nick2===nick);
-                    const isElim=owner&&owner.status!=='active';
+                    const isEliminated=owner&&(owner.status==='eliminated'||owner.status==='cheater');
+                    const isInactive=owner&&owner.status==='inactive';
+                    const isElim=isEliminated;
                     return(
-                      <div key={i} className={`nt${isElim?' nd':myNick===nick?' nsel':''}`}
+                      <div key={i} className={`nt${isElim?' nd':myNick===nick?' nsel':poisonNick===nick?' poisoned':''}`}
                         onClick={()=>{if(!isElim){setMyNick(nick);setMyGuess(null);}}}>
                         <div>{nick}</div>
-                        {isElim&&<div className="nt-sub">✕ ج{owner.eliminatedRound}<br/>{owner.eliminatedBy?`👤 ${owner.eliminatedBy}`:''}</div>}
+                        {isElim&&<div className="nt-sub">✕ ج{owner.eliminatedRound}</div>}
                       </div>
                     );
                   })}
@@ -1455,7 +1472,7 @@ export default function App() {
 
       // تبويبات حسب الدور
       const tabs = role==='admin'
-        ? [['nicks','🎭 الألقاب'],['names','👥 الأسماء'],['fierce','⚔️ الأشرس'],['remaining','المتبقون'],['log','🕵️ التقرير']]
+        ? [['nicks','🎭 الألقاب'],['names','👥 الأسماء'],['fierce','⚔️ الأشرس'],['remaining','المتبقون'],['log','📜 مسار اللعبة']]
         : [['nicks','🎭 الألقاب'],['names','👥 الأسماء'],['me','👤 أنا'],['fierce','⚔️ الأشرس'],['remaining','المتبقون']];
 
       const HeatBar=({items,maxVal,showLabel=true})=>(
