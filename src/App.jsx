@@ -297,6 +297,8 @@ export default function App() {
 
   /* ── ADMIN LOCAL ── */
   const [nickMode, setNickMode]  = useState(1);
+  // nickMode الفعلي: من Firebase للمتسابقين، من الـ state للمشرف
+  const effectiveNickMode = role==='admin' ? nickMode : (gameState?.nickMode||1);
   const [form, setForm]          = useState({name:'',nick:'',nick2:''});
   const [attackDur, setAttackDur] = useState({h:0, m:30, s:0});
 
@@ -318,7 +320,9 @@ export default function App() {
 
   /* ── SPECIAL GAME MODES ── */
   const [poisonNick, setPoisonNick]     = useState('');   // admin sets poison nick
-  const [silentRound, setSilentRound]   = useState(false); // current round is silent
+  const [silentRound, setSilentRound]   = useState(false); // fallback local
+  // الحالة الفعلية من Firebase
+  const isSilentActive = gameState?.silentActive || silentRound;
   const [pendingSilent, setPendingSilent] = useState(null); // stored silent round data
   const [exitAnnounce, setExitAnnounce] = useState(null);  // cinematic exit {nick,name,eliminatedBy}
   const [flipCards, setFlipCards]       = useState({});    // {nick: flipped bool}
@@ -339,6 +343,12 @@ export default function App() {
   const deadline     = gameState?.deadline || null;
   const allRoundsList= Object.values(allRoundsData||{}).sort((a,b)=>a.round-b.round);
   const allAttacksFlat = allRoundsList.flatMap(r=>Object.values(r.attacks||{}));
+  // الأشرس — يُحسب دائماً من كل الجولات
+  const attackerRankGlobal = playersList.map(p=>{
+    const nicks=[p.nick,p.nick2].filter(Boolean);
+    const atks=allAttacksFlat.filter(a=>nicks.includes(a.attackerNick));
+    return{id:p.id,name:p.name,nick:p.nick,nick2:p.nick2,colorIdx:p.colorIdx,initials:p.initials,status:p.status,count:atks.length,hits:atks.filter(a=>a.correct).length};
+  }).filter(p=>p.count>0).sort((a,b)=>b.hits-a.hits||b.count-a.count);
   const hasNews      = true;
   const SUPPORT_EMAIL= 'nicknameGame.support@gmail.com';
 
@@ -534,7 +544,7 @@ export default function App() {
       const existingNicks = existingPlayers.flatMap(([,p])=>[p.nick,p.nick2].filter(Boolean));
       if(existingNicks.includes(joinNick.trim())){setJoinErr('اللقب مأخوذ — اختر لقباً آخر');return;}
       // Validate nick2 if nickMode=2
-      if(nickMode===2){
+      if(effectiveNickMode===2){
         if(!joinNick2.trim()){setJoinErr('أدخل لقبك الثاني');setJoinLoading(false);return;}
         if(existingNicks.includes(joinNick2.trim())){setJoinErr('اللقب الثاني مأخوذ — اختر لقباً آخر');setJoinLoading(false);return;}
         if(joinNick.trim()===joinNick2.trim()){setJoinErr('اللقبان يجب أن يختلفا');setJoinLoading(false);return;}
@@ -542,7 +552,7 @@ export default function App() {
       const newRef = push(playersRef(joinInput));
       await set(newRef, {
         name:joinName.trim(), nick:joinNick.trim(),
-        nick2: nickMode===2 ? joinNick2.trim() : null,
+        nick2: effectiveNickMode===2 ? joinNick2.trim() : null,
         initials:mkI(joinName.trim()),
         colorIdx: existingPlayers.length % AV_COLORS.length,
         status:'active', missedRounds:0,
@@ -631,6 +641,7 @@ export default function App() {
       roundNum: rn,
       deadline: dl,
       roundOrder: { nicks:allNicks, names:allNames },
+      silentActive: false, // إعادة ضبط عند كل جولة جديدة
     });
     notify(`🔔 الجولة ${rn} بدأت!`, 'gold');
   };
@@ -638,6 +649,8 @@ export default function App() {
   const startGame = async () => {
     const minPlayers = nickMode===2 ? 4 : 6;
     if(activePlayers.length<minPlayers){notify(`يلزم ${minPlayers} لاعبين على الأقل`,'error');return;}
+    // احفظ nickMode في Firebase عشان المتسابقين يعرفون
+    await update(gameRef(roomCode), { nickMode });
     await launchRound(1);
   };
 
@@ -741,7 +754,7 @@ export default function App() {
     const elimIds = seenElimIds;
 
     // ══ SILENT ROUND: store attacks only, keep everyone active ══
-    if(silentRound){
+    if(isSilentActive){
       const roundKey = `round_${roundNum}`;
       // Build silent exit data (for later reveal) but DON'T change player status
       const silentExits = playersList
@@ -763,7 +776,7 @@ export default function App() {
       updates[`rooms/${roomCode}/game/phase`]='attacking';
       updates[`rooms/${roomCode}/game/silentPending`]={ silentExits, silentMissed, roundNum };
       await update(ref(db), updates);
-      setSilentRound(false);
+      setSilentRound(false); await update(gameRef(roomCode),{silentActive:false});
       // Launch next round immediately — silent results hidden
       notify(`🤫 جولة الصمت ${roundNum} — انتقلنا للجولة ${roundNum+1}`,'info');
       await launchRound(roundNum+1);
@@ -957,8 +970,8 @@ export default function App() {
           <div className="ctitle">👤 بياناتك</div>
           <div className="ig"><label className="lbl">اسمك الكامل</label><input className="inp" placeholder="محمد عبدالله" value={joinName} onChange={e=>setJoinName(e.target.value)}/></div>
           <div className="ig"><label className="lbl">{nickMode===2?'لقبك الأول':'لقبك الذي اخترته'}</label><input className="inp" placeholder="القناص" value={joinNick} onChange={e=>setJoinNick(e.target.value)}/></div>
-          {nickMode===2&&<div className="ig"><label className="lbl">لقبك الثاني</label><input className="inp" placeholder="الصقر" value={joinNick2} onChange={e=>setJoinNick2(e.target.value)}/></div>}
-          <div style={{background:'rgba(240,192,64,.06)',border:'1px solid rgba(240,192,64,.2)',borderRadius:8,padding:'8px 12px',fontSize:11,color:'var(--muted)'}}>💡 اختر لقب{nickMode===2?'ين لا يمتان':'اً لا يمت'} بصلة لاهتماماتك!</div>
+          {effectiveNickMode===2&&<div className="ig"><label className="lbl">لقبك الثاني</label><input className="inp" placeholder="الصقر" value={joinNick2} onChange={e=>setJoinNick2(e.target.value)}/></div>}
+          <div style={{background:'rgba(240,192,64,.06)',border:'1px solid rgba(240,192,64,.2)',borderRadius:8,padding:'8px 12px',fontSize:11,color:'var(--muted)'}}>💡 اختر لقب{effectiveNickMode===2?'ين لا يمتان':'اً لا يمت'} بصلة لاهتماماتك!</div>
           <div style={{marginTop:8,background:'rgba(79,163,224,.06)',border:'1px solid rgba(79,163,224,.2)',borderRadius:8,padding:'8px 12px',fontSize:11,color:'var(--muted)'}}>🔄 إذا خرجت من اللعبة عن طريق الخطأ، أدخل نفس البيانات للرجوع</div>
           {joinErr&&<div className="err-msg">⚠️ {joinErr}</div>}
         </div>
@@ -1030,10 +1043,17 @@ export default function App() {
     /* ── ATTACK ── */
     if(gameScreen==='attack'){
       // كل الألقاب — النشطون + الخارجون بالخمول (بدون ربط اسم)
+      // لوحة الألقاب — كل الألقاب النشطة + ألقاب الخارجين بالخمول (بدون تمييز)
       const inactiveNicks = playersList.filter(p=>p.status==='inactive').flatMap(p=>[p.nick,p.nick2].filter(Boolean));
-      const baseNicks = roundOrder.nicks?.length>0 ? roundOrder.nicks : playersList.filter(p=>p.status==='active').flatMap(p=>[p.nick,p.nick2].filter(Boolean));
-      const displayNicks = [...new Set([...baseNicks, ...inactiveNicks])];
-      const displayNames = roundOrder.names?.length>0 ? roundOrder.names.map(id=>playersList.find(p=>p.id===id)).filter(Boolean) : playersList;
+      const activeNicks = roundOrder.nicks?.length>0 ? roundOrder.nicks : playersList.filter(p=>p.status==='active').flatMap(p=>[p.nick,p.nick2].filter(Boolean));
+      const displayNicks = [...new Set([...activeNicks, ...inactiveNicks])];
+      // قائمة الأسماء — تخفي اسم اللاعب نفسه وأسماء الخارجين بالخمول
+      const myPlayerId = myId || playersList.find(p=>p.nick===myNickLocal||p.nick2===myNickLocal)?.id;
+      const inactivePids = new Set(playersList.filter(p=>p.status==='inactive').map(p=>p.id));
+      const displayNames = (roundOrder.names?.length>0
+        ? roundOrder.names.map(id=>playersList.find(p=>p.id===id)).filter(Boolean)
+        : playersList
+      ).filter(p=> p.id !== myPlayerId && !inactivePids.has(p.id));
       const proxyPlayer  = proxyFor ? playersList.find(p=>p.id===proxyFor) : null;
 
       return(
@@ -1064,7 +1084,7 @@ export default function App() {
           </div>
 
           {/* Silent round banner */}
-          {silentRound&&(
+          {isSilentActive&&(
             <div className="silent-badge">
               <span style={{fontSize:16}}>🤫</span>
               <div style={{flex:1}}>
@@ -1087,7 +1107,7 @@ export default function App() {
                   silentMissed:[...(prev.silentMissed||[]),...silentMissed],
                   roundNum
                 };
-                setSilentRound(false);
+                setSilentRound(false); await update(gameRef(roomCode),{silentActive:false});
                 await update(ref(db),updates);
                 await launchRound(roundNum+1);
                 notify('🤫 انتقلنا للجولة التالية — النتائج مخفية','info');
@@ -1330,8 +1350,12 @@ export default function App() {
             <div style={{fontSize:12,color:'var(--blue)',fontWeight:700,marginBottom:6}}>🤫 جولة الصمت</div>
             <div style={{fontSize:11,color:'var(--muted)',marginBottom:8}}>النتائج تُخزَّن ولا تُكشف حتى تقرر أنت</div>
             <div style={{display:'flex',gap:6}}>
-              <button className={`btn ${silentRound?'bb':'bgh'} bsm`} style={{flex:1}} onClick={()=>setSilentRound(!silentRound)}>
-                {silentRound?'🤫 الجولة الحالية صامتة — إلغاء؟':'تفعيل جولة الصمت'}
+              <button className={`btn ${isSilentActive?'bb':'bgh'} bsm`} style={{flex:1}} onClick={async()=>{
+                const newVal = !isSilentActive;
+                setSilentRound(newVal);
+                await update(gameRef(roomCode), { silentActive: newVal });
+              }}>
+                {isSilentActive?'🤫 الجولة الحالية صامتة — إلغاء؟':'تفعيل جولة الصمت'}
               </button>
             </div>
             {gameState?.silentPending&&(
@@ -1454,12 +1478,7 @@ export default function App() {
       const allNickSorted=nickHeatmapActive();
       const allNameSorted=nameHeatmapActive();
 
-      // ── الأشرس هجوماً — يجمع nick و nick2 ──
-      const attackerRank=playersList.map(p=>{
-        const nicks=[p.nick,p.nick2].filter(Boolean);
-        const atks=allAttacksFlat.filter(a=>nicks.includes(a.attackerNick));
-        return{id:p.id,name:p.name,nick:p.nick,nick2:p.nick2,colorIdx:p.colorIdx,initials:p.initials,status:p.status,count:atks.length,hits:atks.filter(a=>a.correct).length};
-      }).filter(p=>p.count>0).sort((a,b)=>b.hits-a.hits||b.count-a.count);
+      const attackerRank = attackerRankGlobal; // من الحساب العام
 
       // ── إحصاءات اللاعب الحالي ──
       const myPlayer = playersList.find(p=>p.nick===myNickLocal);
