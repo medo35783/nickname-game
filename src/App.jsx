@@ -1362,18 +1362,18 @@ export default function App() {
             <div className="sbox"><div className="snum" style={{color:'var(--red)'}}>{wrong.length}</div><div className="slbl">فشل ❌</div></div>
           </div>
 
-          {/* بطاقات الكشف — للجميع */}
-          {Object.keys(flipCards).length>0&&<div className="card">
+          {/* بطاقات الكشف — للجميع، مبنية من Firebase مباشرة */}
+          {correct.length>0&&<div className="card">
             <div className="ctitle">💥 كُشفت الهويات — اضغط البطاقة للكشف</div>
-            {[...new Set(atks.filter(a=>a.correct).map(a=>a.realOwnerId))].map((elimId,i)=>{
+            {[...new Set(correct.map(a=>a.realOwnerId))].map((elimId)=>{
               const elim=playersList.find(p=>p.id===elimId);
               if(!elim) return null;
-              const allAttackers=[...new Set(atks.filter(a=>a.correct&&a.realOwnerId===elimId).map(a=>a.attackerNick))];
+              const allAttackers=[...new Set(correct.filter(a=>a.realOwnerId===elimId).map(a=>a.attackerNick))];
               const flipped=flipCards[elim.nick]||false;
               return(
                 <div key={elimId} className="flip-scene" onClick={()=>{
                   if(!flipped){ playSound('explosion'); }
-                  setFlipCards(prev=>({...prev,[elim.nick]:!flipped}));
+                  setFlipCards(prev=>({...prev,[elim.nick]:!prev[elim.nick]}));
                 }}>
                   <div className={`flip-card${flipped?' flipped':''}`}>
                     <div className="flip-front">
