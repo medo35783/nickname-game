@@ -661,7 +661,7 @@ export default function App() {
     const attackerNick = attackerNickOverride || myNickLocal || '(لاعب)';
 
     // Block if attacker is eliminated or inactive
-    const attackerPlayer = playersList.find(p=>p.nick===attackerNick);
+    const attackerPlayer = playersList.find(p=>p.nick===attackerNick||p.nick2===attackerNick);
     if(attackerPlayer && attackerPlayer.status!=='active'){
       notify('❌ لا يمكنك الهجوم — أنت خارج المسابقة','error');
       return;
@@ -674,8 +674,7 @@ export default function App() {
       notify('❌ لا يمكنك مهاجمة لقبك أنت!','error');
       return;
     }
-    // Block self-attack by name — cannot guess yourself
-    const attackerPlayer = playersList.find(p=>p.nick===attackerNick||p.nick2===attackerNick);
+    // Block self-attack by name/id
     if(attackerPlayer && myGuess===attackerPlayer.id){
       notify('❌ لا يمكنك تخمين نفسك!','error');
       return;
@@ -876,8 +875,6 @@ export default function App() {
      RENDER
   ════════════════════════════════════════════════ */
 
-  /* ── LEADERBOARD DATA ── */
-;
 
   // Heatmap — only players with at least 1 attack on them (fix least targeted)
   const nickHeatmapActive=()=>{
@@ -1545,11 +1542,14 @@ export default function App() {
             <div style={{fontSize:12,color:'var(--muted)',marginBottom:12,textAlign:'center'}}>
               الأسماء من الأكثر استهدافاً للأقل
             </div>
-            {(phase==='attacking'||phase==='revealing')&&roundNameSorted.length>0&&<>
+            {phase==='revealing'&&roundNameSorted.length>0&&<>
               <div className="ctitle">الجولة الحالية</div>
               <HeatBar items={roundNameSorted} maxVal={roundNameSorted[0]?.[1]||1}/>
               <div className="div"/>
             </>}
+            {phase==='attacking'&&<div style={{textAlign:'center',background:'rgba(240,192,64,.06)',border:'1px solid rgba(240,192,64,.15)',borderRadius:10,padding:'10px',fontSize:12,color:'var(--muted)',marginBottom:12}}>
+              🔒 إحصائيات الجولة الحالية ستظهر بعد الإعلان
+            </div>}
             <div className="ctitle">كامل الجولات</div>
             {allNameSorted.length===0
               ?<div style={{textAlign:'center',color:'var(--muted)',padding:18,fontSize:12}}>لا بيانات بعد</div>
