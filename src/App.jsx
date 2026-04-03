@@ -292,6 +292,7 @@ export default function App() {
   const [joinName, setJoinName] = useState('');
   const [joinNick, setJoinNick] = useState('');
   const [joinNick2, setJoinNick2] = useState('');
+  const [joinLoading, setJoinLoading] = useState(false); // prevent double submit
 
   /* ── LIVE GAME STATE (synced from Firebase) ── */
   const [gameState, setGameState] = useState(null);   // rooms/{code}/game
@@ -345,7 +346,7 @@ export default function App() {
   const allRoundsList= Object.values(allRoundsData||{}).sort((a,b)=>a.round-b.round);
   const allAttacksFlat = allRoundsList.flatMap(r=>Object.values(r.attacks||{}));
   const hasNews      = true;
-  const SUPPORT_EMAIL= 'support@nickname-game.app';
+  const SUPPORT_EMAIL= 'nicknameGame.support@gmail.com';
 
   /* ══ AUTO-REJOIN on mount ══ */
   useEffect(()=>{ checkAutoRejoin(); },[]);
@@ -494,9 +495,11 @@ export default function App() {
 
   /* ══ PLAYER: JOIN ROOM ══ */
   const joinRoom = async () => {
+    if(joinLoading) return; // منع الضغط المزدوج
     setJoinErr('');
     if(joinInput.length!==6){setJoinErr('الرمز 6 أرقام');return;}
     if(!joinName.trim()||!joinNick.trim()){setJoinErr('أدخل اسمك ولقبك');return;}
+    setJoinLoading(true);
     try {
       const snap = await get(roomRef(joinInput));
       if(!snap.exists()){setJoinErr('الغرفة غير موجودة');return;}
@@ -536,9 +539,16 @@ export default function App() {
       // check nick not taken
       const existingNicks = existingPlayers.flatMap(([,p])=>[p.nick,p.nick2].filter(Boolean));
       if(existingNicks.includes(joinNick.trim())){setJoinErr('اللقب مأخوذ — اختر لقباً آخر');return;}
+      // Validate nick2 if nickMode=2
+      if(nickMode===2){
+        if(!joinNick2.trim()){setJoinErr('أدخل لقبك الثاني');setJoinLoading(false);return;}
+        if(existingNicks.includes(joinNick2.trim())){setJoinErr('اللقب الثاني مأخوذ — اختر لقباً آخر');setJoinLoading(false);return;}
+        if(joinNick.trim()===joinNick2.trim()){setJoinErr('اللقبان يجب أن يختلفا');setJoinLoading(false);return;}
+      }
       const newRef = push(playersRef(joinInput));
       await set(newRef, {
-        name:joinName.trim(), nick:joinNick.trim(), nick2:null,
+        name:joinName.trim(), nick:joinNick.trim(),
+        nick2: nickMode===2 ? joinNick2.trim() : null,
         initials:mkI(joinName.trim()),
         colorIdx: existingPlayers.length % AV_COLORS.length,
         status:'active', missedRounds:0,
@@ -556,6 +566,8 @@ export default function App() {
       notify('✅ انضممت للعبة! انتظر المشرف', 'success');
     } catch(e) {
       setJoinErr('خطأ في الاتصال — تحقق من الإنترنت');
+    } finally {
+      setJoinLoading(false);
     }
   };
 
@@ -630,7 +642,8 @@ export default function App() {
   };
 
   const startGame = async () => {
-    if(activePlayers.length<6){notify('يلزم 6 لاعبين على الأقل','error');return;}
+    const minPlayers = nickMode===2 ? 4 : 6;
+    if(activePlayers.length<minPlayers){notify(`يلزم ${minPlayers} لاعبين على الأقل`,'error');return;}
     await launchRound(1);
   };
 
@@ -942,12 +955,13 @@ export default function App() {
         <div className="card">
           <div className="ctitle">👤 بياناتك</div>
           <div className="ig"><label className="lbl">اسمك الكامل</label><input className="inp" placeholder="محمد عبدالله" value={joinName} onChange={e=>setJoinName(e.target.value)}/></div>
-          <div className="ig"><label className="lbl">لقبك الذي اخترته</label><input className="inp" placeholder="القناص" value={joinNick} onChange={e=>setJoinNick(e.target.value)}/></div>
-          <div style={{background:'rgba(240,192,64,.06)',border:'1px solid rgba(240,192,64,.2)',borderRadius:8,padding:'8px 12px',fontSize:11,color:'var(--muted)'}}>💡 اختر لقباً لا يمت بصلة لاهتماماتك الحقيقية!</div>
+          <div className="ig"><label className="lbl">{nickMode===2?'لقبك الأول':'لقبك الذي اخترته'}</label><input className="inp" placeholder="القناص" value={joinNick} onChange={e=>setJoinNick(e.target.value)}/></div>
+          {nickMode===2&&<div className="ig"><label className="lbl">لقبك الثاني</label><input className="inp" placeholder="الصقر" value={joinNick2} onChange={e=>setJoinNick2(e.target.value)}/></div>}
+          <div style={{background:'rgba(240,192,64,.06)',border:'1px solid rgba(240,192,64,.2)',borderRadius:8,padding:'8px 12px',fontSize:11,color:'var(--muted)'}}>💡 اختر لقب{nickMode===2?'ين لا يمتان':'اً لا يمت'} بصلة لاهتماماتك!</div>
           <div style={{marginTop:8,background:'rgba(79,163,224,.06)',border:'1px solid rgba(79,163,224,.2)',borderRadius:8,padding:'8px 12px',fontSize:11,color:'var(--muted)'}}>🔄 إذا خرجت من اللعبة عن طريق الخطأ، أدخل نفس البيانات للرجوع</div>
           {joinErr&&<div className="err-msg">⚠️ {joinErr}</div>}
         </div>
-        <button className="btn bg" onClick={joinRoom}>🚀 انضمام</button>
+        <button className="btn bg" onClick={joinRoom} disabled={joinLoading}>{joinLoading?'⏳ جارٍ الانضمام...':`🚀 انضمام`}</button>
       </div>
     );
 
@@ -1006,8 +1020,8 @@ export default function App() {
           <div className="sbox"><div className="snum">{playersList.length}</div><div className="slbl">مسجلون</div></div>
           <div className="sbox"><div className="snum" style={{color:'var(--green)'}}>{activePlayers.length}</div><div className="slbl">نشطون</div></div>
         </div>
-        {activePlayers.length<6&&playersList.length>0&&<div style={{fontSize:12,color:'var(--red)',textAlign:'center',marginBottom:9}}>يلزم {6-activePlayers.length} لاعب إضافي</div>}
-        <button className="btn bg" disabled={activePlayers.length<6} onClick={startGame} style={{marginBottom:8}}>🚀 بدء اللعبة ({activePlayers.length}/6+)</button>
+        {(()=>{const min=nickMode===2?4:6;return activePlayers.length<min&&playersList.length>0&&<div style={{fontSize:12,color:'var(--red)',textAlign:'center',marginBottom:9}}>يلزم {min-activePlayers.length} لاعب إضافي</div>;})()}
+        <button className="btn bg" disabled={nickMode===2?activePlayers.length<4:activePlayers.length<6} onClick={startGame} style={{marginBottom:8}}>🚀 بدء اللعبة ({activePlayers.length}/{nickMode===2?4:6}+)</button>
         {phase!=='lobby'&&<button className="btn bb" onClick={()=>setGameScreen('attack')} style={{marginBottom:8}}>🎮 العودة للعبة</button>}
       </div>
     );
@@ -1177,7 +1191,17 @@ export default function App() {
               {[...elimPlayers].sort((a,b)=>(b.eliminatedRound||0)-(a.eliminatedRound||0)).map(p=>(
                 <div key={p.id} className="grave">
                   <div className="grave-name">{p.name}</div>
-                  {p.status==='eliminated'&&<div className="grave-nick">"{p.nick}"{p.nick2?` / "${p.nick2}"`:''}</div>}
+                  {p.status==='eliminated'&&<div className="grave-nick">
+                    {/* Show only the nick that was actually targeted */}
+                    {(()=>{
+                      const targetedNick = allAttacksFlat.find(a=>a.correct&&a.realOwnerId===p.id)?.targetNick;
+                      const shownNick = targetedNick||p.nick;
+                      const otherNick = p.nick2&&shownNick===p.nick?p.nick2:p.nick2&&shownNick===p.nick2?p.nick:null;
+                      // Only show the other nick if it was also targeted in a correct attack
+                      const otherTargeted = otherNick&&allAttacksFlat.some(a=>a.correct&&a.realOwnerId===p.id&&a.targetNick===otherNick);
+                      return <>"{shownNick}"{otherTargeted?` / "${otherNick}"`:''}</>;
+                    })()}
+                  </div>}
                   <div className="grave-info">
                     {p.status==='cheater'?'🚫 خرج من المسابقة':
                      p.status==='inactive'?`😴 خرج لعدم الهجوم — ج${p.eliminatedRound}`:
@@ -1338,12 +1362,9 @@ export default function App() {
             <div className="sbox"><div className="snum" style={{color:'var(--red)'}}>{wrong.length}</div><div className="slbl">فشل ❌</div></div>
           </div>
 
-          {/* بطاقات الكشف — للمشرف يضغط، للمتسابق تشويق */}
+          {/* بطاقات الكشف — للجميع */}
           {Object.keys(flipCards).length>0&&<div className="card">
-            <div className="ctitle">💥 كُشفت الهويات{role==='admin'?' — اضغط البطاقة للكشف':''}</div>
-            {role!=='admin'&&<div style={{textAlign:'center',padding:'10px 0 6px',fontSize:12,color:'var(--muted)'}}>
-              🔒 {Object.keys(flipCards).length} لقب كُشف — اذهب للإحصائيات لتعرف من خرج
-            </div>}
+            <div className="ctitle">💥 كُشفت الهويات — اضغط البطاقة للكشف</div>
             {[...new Set(atks.filter(a=>a.correct).map(a=>a.realOwnerId))].map((elimId,i)=>{
               const elim=playersList.find(p=>p.id===elimId);
               if(!elim) return null;
@@ -1351,7 +1372,6 @@ export default function App() {
               const flipped=flipCards[elim.nick]||false;
               return(
                 <div key={elimId} className="flip-scene" onClick={()=>{
-                  if(role!=='admin') return; // فقط المشرف يكشف البطاقات
                   if(!flipped){ playSound('explosion'); }
                   setFlipCards(prev=>({...prev,[elim.nick]:!flipped}));
                 }}>
@@ -1422,8 +1442,8 @@ export default function App() {
 
       // تبويبات حسب الدور
       const tabs = role==='admin'
-        ? [['nicks','🎭 الألقاب'],['names','👥 الأسماء'],['fierce','الأشرس'],['remaining','المتبقون'],['log','🕵️ التقرير']]
-        : [['nicks','🎭 الألقاب'],['names','👥 الأسماء'],['me','👤 أنا'],['fierce','الأشرس'],['remaining','المتبقون']];
+        ? [['nicks','🎭 الألقاب'],['names','👥 الأسماء'],['remaining','المتبقون'],['log','🕵️ التقرير']]
+        : [['nicks','🎭 الألقاب'],['names','👥 الأسماء'],['me','👤 أنا'],['remaining','المتبقون']];
 
       const HeatBar=({items,maxVal,showLabel=true})=>(
         <>{items.map(([label,count],i)=>(
@@ -1598,7 +1618,17 @@ export default function App() {
               {[...elimPlayers].sort((a,b)=>(b.eliminatedRound||0)-(a.eliminatedRound||0)).map(p=>(
                 <div key={p.id} className="grave">
                   <div className="grave-name">{p.name}</div>
-                  {p.status==='eliminated'&&<div className="grave-nick">"{p.nick}"{p.nick2?` / "${p.nick2}"`:''}</div>}
+                  {p.status==='eliminated'&&<div className="grave-nick">
+                    {/* Show only the nick that was actually targeted */}
+                    {(()=>{
+                      const targetedNick = allAttacksFlat.find(a=>a.correct&&a.realOwnerId===p.id)?.targetNick;
+                      const shownNick = targetedNick||p.nick;
+                      const otherNick = p.nick2&&shownNick===p.nick?p.nick2:p.nick2&&shownNick===p.nick2?p.nick:null;
+                      // Only show the other nick if it was also targeted in a correct attack
+                      const otherTargeted = otherNick&&allAttacksFlat.some(a=>a.correct&&a.realOwnerId===p.id&&a.targetNick===otherNick);
+                      return <>"{shownNick}"{otherTargeted?` / "${otherNick}"`:''}</>;
+                    })()}
+                  </div>}
                   <div className="grave-info">
                     {p.status==='cheater'?'🚫 خرج من المسابقة':
                      p.status==='inactive'?`😴 خرج لعدم الهجوم — ج${p.eliminatedRound}`:
@@ -1733,6 +1763,42 @@ export default function App() {
               );
             })}
           </div>
+
+          {/* الأشرس هجوماً — بالألقاب فقط في النهاية */}
+          {(()=>{
+            const fierceRank = playersList.map(p=>{
+              const atks=allAttacksFlat.filter(a=>a.attackerNick===p.nick);
+              const hits=atks.filter(a=>a.correct);
+              return{nick:p.nick,colorIdx:p.colorIdx,initials:p.initials,status:p.status,count:atks.length,hits:hits.length};
+            }).filter(p=>p.count>0).sort((a,b)=>b.hits-a.hits||b.count-a.count);
+            if(fierceRank.length===0) return null;
+            return(
+              <div className="card" style={{marginTop:12}}>
+                <div className="ctitle">⚔️ الأشرس هجوماً</div>
+                <div style={{fontSize:11,color:'var(--muted)',marginBottom:10}}>الترتيب بعد انتهاء المسابقة — بالألقاب فقط</div>
+                {fierceRank.map((p,i)=>(
+                  <div key={p.nick} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',background:'#09091e',borderRadius:9,marginBottom:5,border:`1px solid ${i===0?'rgba(240,192,64,.3)':i===1?'rgba(200,200,220,.15)':'rgba(255,255,255,.05)'}`}}>
+                    <div style={{fontFamily:'Cairo',fontSize:16,fontWeight:900,width:26,textAlign:'center',color:i===0?'var(--gold)':i===1?'rgba(200,200,220,.8)':i===2?'var(--red)':'var(--muted)'}}>
+                      {i===0?'👑':i===1?'🥈':i===2?'🥉':i+1}
+                    </div>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:700,fontSize:13,color:'var(--gold)'}}>"{p.nick}"</div>
+                    </div>
+                    <div style={{display:'flex',gap:12,alignItems:'center'}}>
+                      <div style={{textAlign:'center'}}>
+                        <div style={{fontFamily:'Cairo',fontSize:15,fontWeight:900,color:'var(--gold)'}}>{p.count}</div>
+                        <div style={{fontSize:9,color:'var(--muted)'}}>هجمة</div>
+                      </div>
+                      <div style={{textAlign:'center'}}>
+                        <div style={{fontFamily:'Cairo',fontSize:15,fontWeight:900,color:'var(--green)'}}>{p.hits}</div>
+                        <div style={{fontSize:9,color:'var(--muted)'}}>إصابة</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
 
           {/* السجل الكامل للجميع عند النهاية */}
           <div className="card" style={{marginTop:12}}>
