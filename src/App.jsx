@@ -667,6 +667,12 @@ export default function App() {
       notify('❌ لا يمكنك مهاجمة لقبك أنت!','error');
       return;
     }
+    // Block self-attack by name — cannot guess yourself
+    const attackerPlayer = playersList.find(p=>p.nick===attackerNick||p.nick2===attackerNick);
+    if(attackerPlayer && myGuess===attackerPlayer.id){
+      notify('❌ لا يمكنك تخمين نفسك!','error');
+      return;
+    }
 
     // Block double submit in same round
     const alreadyAttacked = Object.values(attacks||{}).some(a=>a.attackerNick===attackerNick);
@@ -791,7 +797,9 @@ export default function App() {
 
     const roundKey = `round_${roundNum}`;
     updates[`rooms/${roomCode}/rounds/${roundKey}`]={ round:roundNum, attacks:attacks||{}, endedAt:Date.now() };
-    updates[`rooms/${roomCode}/game/phase`]='revealing';
+    // إذا بقي اثنان أو أقل بعد هذه الجولة — أنهِ المسابقة مباشرة
+    const remainingAfter = playersList.filter(p=>p.status==='active'&&!elimIds.has(p.id)).length;
+    updates[`rooms/${roomCode}/game/phase`] = remainingAfter<=2 ? 'ended' : 'revealing';
     await update(ref(db), updates);
 
     if(exitList.length>0){
@@ -816,7 +824,7 @@ export default function App() {
   /* ══ ADMIN: NEXT ROUND ══ */
   const nextRound = async () => {
     const still = playersList.filter(p=>p.status==='active');
-    if(still.length<=1){ await update(gameRef(roomCode),{phase:'ended'}); return; }
+    if(still.length<=2){ await update(gameRef(roomCode),{phase:'ended'}); return; } // اثنان أو أقل = فائزان
     await launchRound(roundNum+1);
   };
 
@@ -1045,7 +1053,6 @@ export default function App() {
                 نشطون: <strong style={{color:'var(--green)'}}>{activePlayers.length}</strong>
               </div>
               <div style={{display:'flex',gap:5}}>
-                <button className="btn bgh bxs" style={{padding:'3px 8px'}} onClick={()=>setShowLeaderboard(true)}>🏆</button>
                 <button className="btn bgh bxs" style={{padding:'3px 8px'}} onClick={()=>setGameScreen('stats')}>📊</button>
               </div>
             </div>
@@ -1400,8 +1407,8 @@ export default function App() {
             ✅ لم يُكشف أحد هذه الجولة!
           </div>}
 
-          {role==='admin'&&(activePlayers.length<=1
-            ?<button className="btn bg" onClick={endGame}>🏆 إعلان الفائز</button>
+          {role==='admin'&&(activePlayers.length<=2
+            ?<button className="btn bg" onClick={endGame}>🏆 إعلان الفائزَين</button>
             :<button className="btn bg" onClick={nextRound}>▶️ الجولة {roundNum+1}</button>
           )}
           <button className="btn bo mt2" onClick={()=>{setStatsTab('nicks');setGameScreen('stats');}}>
@@ -1442,8 +1449,8 @@ export default function App() {
 
       // تبويبات حسب الدور
       const tabs = role==='admin'
-        ? [['nicks','🎭 الألقاب'],['names','👥 الأسماء'],['remaining','المتبقون'],['log','🕵️ التقرير']]
-        : [['nicks','🎭 الألقاب'],['names','👥 الأسماء'],['me','👤 أنا'],['remaining','المتبقون']];
+        ? [['nicks','🎭 الألقاب'],['names','👥 الأسماء'],['fierce','⚔️ الأشرس'],['remaining','المتبقون'],['log','🕵️ التقرير']]
+        : [['nicks','🎭 الألقاب'],['names','👥 الأسماء'],['me','👤 أنا'],['fierce','⚔️ الأشرس'],['remaining','المتبقون']];
 
       const HeatBar=({items,maxVal,showLabel=true})=>(
         <>{items.map(([label,count],i)=>(
@@ -1461,7 +1468,7 @@ export default function App() {
 
       return(
         <div className="scr">
-          <button className="btn bgh bsm" style={{width:'auto',marginBottom:12}} onClick={()=>setGameScreen('attack')}>← رجوع</button>
+          <button className="btn bgh bsm" style={{width:'auto',marginBottom:12}} onClick={()=>setGameScreen(phase==='revealing'||phase==='ended'?'results':'attack')}>← رجوع</button>
 
           <div className="tabs" style={{flexWrap:'wrap',gap:4}}>
             {tabs.map(([k,l])=>(
@@ -1475,12 +1482,15 @@ export default function App() {
             <div style={{fontSize:12,color:'var(--muted)',marginBottom:12,textAlign:'center'}}>
               الألقاب من الأكثر استهدافاً للأقل — اضغط لقباً لترى من هاجمه
             </div>
-            {/* هيت ماب الجولة الحالية */}
-            {(phase==='attacking'||phase==='revealing')&&roundNickSorted.length>0&&<>
+            {/* هيت ماب الجولة الحالية — تظهر فقط بعد الكشف */}
+            {phase==='revealing'&&roundNickSorted.length>0&&<>
               <div className="ctitle">الجولة الحالية</div>
               <HeatBar items={roundNickSorted} maxVal={roundNickSorted[0]?.[1]||1}/>
               <div className="div"/>
             </>}
+            {phase==='attacking'&&<div style={{textAlign:'center',background:'rgba(240,192,64,.06)',border:'1px solid rgba(240,192,64,.15)',borderRadius:10,padding:'10px',fontSize:12,color:'var(--muted)',marginBottom:12}}>
+              🔒 إحصائيات الجولة الحالية ستظهر بعد الإعلان
+            </div>}
             <div className="ctitle">كامل الجولات</div>
             {allNickSorted.length===0
               ?<div style={{textAlign:'center',color:'var(--muted)',padding:18,fontSize:12}}>لا بيانات بعد</div>
@@ -1566,7 +1576,7 @@ export default function App() {
           {/* ══ الأشرس هجوماً ══ */}
           {statsTab==='fierce'&&<>
             <div style={{fontSize:12,color:'var(--muted)',marginBottom:12,textAlign:'center'}}>
-              ترتيب اللاعبين حسب عدد الهجمات
+              {role==='admin'?'الاسم واللقب — للمشرف فقط':'الألقاب فقط — بدون كشف الأسماء'}
             </div>
             {attackerRank.length===0
               ?<div style={{textAlign:'center',color:'var(--muted)',padding:18,fontSize:12}}>لا هجمات بعد</div>
@@ -1577,9 +1587,12 @@ export default function App() {
                 </div>
                 <Av p={p} sz={32} fs={12}/>
                 <div style={{flex:1}}>
-                  <div style={{fontWeight:700,fontSize:13}}>{p.name}</div>
-                  {/* المشرف يرى اللقب */}
-                  {role==='admin'&&<div style={{fontSize:11,color:'var(--gold)'}}>{p.nick}</div>}
+                  {/* المشرف يرى الاسم واللقب، المتسابق يرى اللقب فقط */}
+                  {role==='admin'
+                    ?<><div style={{fontWeight:700,fontSize:13}}>{p.name}</div>
+                      <div style={{fontSize:11,color:'var(--gold)'}}>"{p.nick}"</div></>
+                    :<div style={{fontWeight:700,fontSize:13,color:'var(--gold)'}}>"{p.nick}"</div>
+                  }
                 </div>
                 <div style={{textAlign:'center'}}>
                   <div style={{fontFamily:'Cairo',fontSize:16,fontWeight:900,color:'var(--gold)'}}>{p.count}</div>
@@ -2324,36 +2337,7 @@ export default function App() {
       )}
 
       {/* ══ LEADERBOARD MODAL ══ */}
-      {showLeaderboard&&(
-        <div className="mbg" onClick={()=>setShowLeaderboard(false)}>
-          <div className="modal" style={{maxWidth:400,textAlign:'right'}} onClick={e=>e.stopPropagation()}>
-            <div style={{textAlign:'center',marginBottom:14}}>
-              <div style={{fontSize:28,marginBottom:4}}>🏆</div>
-              <div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:'var(--gold)'}}>لوحة المتصدرين</div>
-              <div style={{fontSize:11,color:'var(--muted)',marginTop:2}}>الترتيب بدون كشف الأسماء — النقاط: إصابة×3 + هجوم×1</div>
-            </div>
-            <div className="sc" style={{maxHeight:320}}>
-              {getLeaderboard().map((p,i)=>(
-                <div key={p.id} className={`lb-row ${i===0?'lb-1':i===1?'lb-2':i===2?'lb-3':''}`}>
-                  <div className="lb-rank" style={{color:i===0?'var(--gold)':i===1?'rgba(200,200,220,.8)':i===2?'var(--red)':'var(--muted)'}}>
-                    {i===0?'👑':i===1?'🥈':i===2?'🥉':`${i+1}`}
-                  </div>
-                  <Av p={p} sz={32} fs={12}/>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:12,color:'var(--muted)'}}>لاعب {i+1}</div>
-                    <div style={{fontSize:10,color:'var(--muted)',marginTop:1}}>
-                      ⚔️{p.attacks} إصابات:{p.hits} استُهدف:{p.targeted}
-                    </div>
-                  </div>
-                  <div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:i===0?'var(--gold)':'var(--text)'}}>{p.score}</div>
-                  {p.status!=='active'&&<span className="tag tr" style={{fontSize:9}}>خرج</span>}
-                </div>
-              ))}
-            </div>
-            <button className="btn bgh mt2" onClick={()=>setShowLeaderboard(false)}>إغلاق</button>
-          </div>
-        </div>
-      )}
+
 
       {/* ══ TUTORIAL MODAL ══ */}
       {modal?.type==='guide'&&(
