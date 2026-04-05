@@ -288,6 +288,7 @@ export default function App() {
   const [joinNick, setJoinNick] = useState('');
   const [joinNick2, setJoinNick2] = useState('');
   const [joinLoading, setJoinLoading] = useState(false); // prevent double submit
+  const [roomNickMode, setRoomNickMode] = useState(1); // nickMode من الغرفة
 
   /* ── LIVE GAME STATE (synced from Firebase) ── */
   const [gameState, setGameState] = useState(null);   // rooms/{code}/game
@@ -544,7 +545,7 @@ export default function App() {
       const existingNicks = existingPlayers.flatMap(([,p])=>[p.nick,p.nick2].filter(Boolean));
       if(existingNicks.includes(joinNick.trim())){setJoinErr('اللقب مأخوذ — اختر لقباً آخر');return;}
       // Validate nick2 if nickMode=2
-      if(effectiveNickMode===2){
+      if(roomNickMode===2){
         if(!joinNick2.trim()){setJoinErr('أدخل لقبك الثاني');setJoinLoading(false);return;}
         if(existingNicks.includes(joinNick2.trim())){setJoinErr('اللقب الثاني مأخوذ — اختر لقباً آخر');setJoinLoading(false);return;}
         if(joinNick.trim()===joinNick2.trim()){setJoinErr('اللقبان يجب أن يختلفا');setJoinLoading(false);return;}
@@ -552,7 +553,7 @@ export default function App() {
       const newRef = push(playersRef(joinInput));
       await set(newRef, {
         name:joinName.trim(), nick:joinNick.trim(),
-        nick2: effectiveNickMode===2 ? joinNick2.trim() : null,
+        nick2: roomNickMode===2 ? joinNick2.trim() : null,
         initials:mkI(joinName.trim()),
         colorIdx: existingPlayers.length % AV_COLORS.length,
         status:'active', missedRounds:0,
@@ -986,15 +987,26 @@ export default function App() {
         <div className="psub">أدخل رمز الغرفة المرسل من المشرف</div>
         <div className="card">
           <div className="ig"><label className="lbl">🔢 رمز الغرفة (6 أرقام)</label>
-            <input className={`inp big${joinErr?'err-b':''}`} placeholder="× × × × × ×" maxLength={6} value={joinInput} onChange={e=>{setJoinInput(e.target.value.replace(/\D/g,''));setJoinErr('');}}/>
+            <input className={`inp big${joinErr?'err-b':''}`} placeholder="× × × × × ×" maxLength={6} value={joinInput} onChange={async e=>{
+              const val=e.target.value.replace(/\D/g,'');
+              setJoinInput(val);setJoinErr('');
+              // اقرأ nickMode من الغرفة عند اكتمال الرمز
+              if(val.length===6){
+                try{
+                  const s=await get(roomRef(val));
+                  if(s.exists()) setRoomNickMode(s.val()?.game?.nickMode||1);
+                }catch(e){}
+              } else setRoomNickMode(1);
+            }}/>
           </div>
         </div>
         <div className="card">
           <div className="ctitle">👤 بياناتك</div>
           <div className="ig"><label className="lbl">اسمك الكامل</label><input className="inp" placeholder="محمد عبدالله" value={joinName} onChange={e=>setJoinName(e.target.value)}/></div>
           <div className="ig"><label className="lbl">{nickMode===2?'لقبك الأول':'لقبك الذي اخترته'}</label><input className="inp" placeholder="القناص" value={joinNick} onChange={e=>setJoinNick(e.target.value)}/></div>
-          {effectiveNickMode===2&&<div className="ig"><label className="lbl">لقبك الثاني</label><input className="inp" placeholder="الصقر" value={joinNick2} onChange={e=>setJoinNick2(e.target.value)}/></div>}
-          <div style={{background:'rgba(240,192,64,.06)',border:'1px solid rgba(240,192,64,.2)',borderRadius:8,padding:'8px 12px',fontSize:11,color:'var(--muted)'}}>💡 اختر لقب{effectiveNickMode===2?'ين لا يمتان':'اً لا يمت'} بصلة لاهتماماتك!</div>
+          {roomNickMode===2&&<div className="ig"><label className="lbl">لقبك الثاني</label><input className="inp" placeholder="الصقر" value={joinNick2} onChange={e=>setJoinNick2(e.target.value)}/></div>}
+          {roomNickMode===2&&<div style={{background:'rgba(79,163,224,.08)',border:'1px solid rgba(79,163,224,.25)',borderRadius:8,padding:'7px 12px',fontSize:11,color:'var(--blue)',marginBottom:6}}>ℹ️ هذه اللعبة تستخدم نظام اللقبين</div>}
+          <div style={{background:'rgba(240,192,64,.06)',border:'1px solid rgba(240,192,64,.2)',borderRadius:8,padding:'8px 12px',fontSize:11,color:'var(--muted)'}}>💡 اختر لقب{roomNickMode===2?'ين لا يمتان':'اً لا يمت'} بصلة لاهتماماتك!</div>
           <div style={{marginTop:8,background:'rgba(79,163,224,.06)',border:'1px solid rgba(79,163,224,.2)',borderRadius:8,padding:'8px 12px',fontSize:11,color:'var(--muted)'}}>🔄 إذا خرجت من اللعبة عن طريق الخطأ، أدخل نفس البيانات للرجوع</div>
           {joinErr&&<div className="err-msg">⚠️ {joinErr}</div>}
         </div>
