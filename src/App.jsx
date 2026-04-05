@@ -641,7 +641,8 @@ export default function App() {
       roundNum: rn,
       deadline: dl,
       roundOrder: { nicks:allNicks, names:allNames },
-      silentActive: false, // إعادة ضبط عند كل جولة جديدة
+      silentActive: false,
+      poisonPenalized: null, // إعادة ضبط عقوبة اللقب المسموم
     });
     notify(`🔔 الجولة ${rn} بدأت!`, 'gold');
   };
@@ -659,6 +660,13 @@ export default function App() {
     if(!myNick||!myGuess){notify('اختر لقباً وحدد صاحبه','error');return;}
 
     const attackerNick = attackerNickOverride || myNickLocal || '(لاعب)';
+
+    // Block if penalized by poison nick last round
+    const penalized = gameState?.poisonPenalized||[];
+    if(penalized.includes(attackerNick)){
+      notify('☠️ أنت ممنوع من الهجوم هذه الجولة بسبب اللقب المسموم!','error');
+      return;
+    }
 
     // Block if attacker is eliminated or inactive
     const attackerPlayer = playersList.find(p=>p.nick===attackerNick||p.nick2===attackerNick);
@@ -736,7 +744,10 @@ export default function App() {
     if(poisonNick) {
       const poisonAttacks = currentAttacks.filter(a=>a.targetNick===poisonNick&&!a.correct);
       if(poisonAttacks.length>0) {
-        setTimeout(()=>{ playSound('poison_hit'); notify(`☠️ ${poisonAttacks.length} لاعب أصاب اللقب المسموم!`,'info'); },600);
+        setTimeout(()=>{ playSound('poison_hit'); notify(`☠️ ${poisonAttacks.length} لاعب أصاب اللقب المسموم — ممنوعون من الجولة القادمة!`,'info'); },600);
+        // احفظ المعاقبين في Firebase
+        const penalized = poisonAttacks.map(a=>a.attackerNick);
+        await update(gameRef(roomCode),{poisonPenalized:penalized});
       }
     }
 
@@ -790,6 +801,21 @@ export default function App() {
       if(elimIds.has(p.id)){
         const attackers = elimAttackers[p.id]||[];
         const eliminatedByStr = attackers.join(' + ');
+
+        // لقبان: تحقق إذا تم كشف كلا اللقبين
+        if(p.nick2){
+          const hitNicks = currentAttacks.filter(a=>a.correct&&a.realOwnerId===p.id).map(a=>a.targetNick);
+          const nick1Hit = hitNicks.includes(p.nick);
+          const nick2Hit = hitNicks.includes(p.nick2);
+          if(!nick1Hit||!nick2Hit){
+            // لقب واحد فقط كُشف — اللاعب يبقى لكن نضع علامة
+            const revealedNick = nick1Hit ? p.nick : p.nick2;
+            updates[`rooms/${roomCode}/players/${p.id}/revealedNick`]=revealedNick;
+            exitList.push({nick:revealedNick, name:null, partial:true, eliminatedBy:eliminatedByStr, attackers, initials:p.initials, colorIdx:p.colorIdx});
+            continue; // لا يخرج
+          }
+        }
+
         updates[`rooms/${roomCode}/players/${p.id}/status`]='eliminated';
         updates[`rooms/${roomCode}/players/${p.id}/eliminatedBy`]=eliminatedByStr;
         updates[`rooms/${roomCode}/players/${p.id}/eliminatedByList`]=attackers;
@@ -996,7 +1022,10 @@ export default function App() {
           <div className="ctitle">⚙️ إعدادات اللعبة</div>
           <div className="lbl mb2">عدد الألقاب لكل لاعب</div>
           <div style={{display:'flex',gap:8,marginBottom:12}}>
-            {[1,2].map(n=><button key={n} className={`btn ${nickMode===n?'bg':'bgh'}`} style={{flex:1}} onClick={()=>setNickMode(n)}>{n===1?'لقب واحد':'لقبان'}</button>)}
+            {[1,2].map(n=><button key={n} className={`btn ${nickMode===n?'bg':'bgh'}`} style={{flex:1}} onClick={async()=>{
+              setNickMode(n);
+              if(roomCode) await update(gameRef(roomCode),{nickMode:n});
+            }}>{n===1?'لقب واحد':'لقبان'}</button>)}
           </div>
           <div className="lbl mb2">⏱️ مدة كل جولة</div>
           <div className="tpick">
@@ -1106,6 +1135,8 @@ export default function App() {
                 };
                 setSilentRound(false); await update(gameRef(roomCode),{silentActive:false});
                 await update(ref(db),updates);
+                // امسح هجمات الجولة الحالية قبل بدء الجديدة
+                await set(ref(db,`rooms/${roomCode}/currentRound`),{attacks:{}});
                 await launchRound(roundNum+1);
                 notify('🤫 انتقلنا للجولة التالية — النتائج مخفية','info');
               }}>⏭️ الجولة التالية</button>}
@@ -1396,8 +1427,13 @@ export default function App() {
     if(gameScreen==='results'){
       const lastRound = allRoundsList[allRoundsList.length-1];
       const atks = Object.values(lastRound?.attacks||attacks||{});
-      const correct=atks.filter(a=>a.correct);
-      const wrong=atks.filter(a=>!a.correct);
+      // عند كشف جولة الصمت — أضف هجمات الجولة الصامتة أيضاً
+      const silentRoundNum = gameState?.silentPending?.roundNum;
+      const silentRoundData = silentRoundNum ? allRoundsList.find(r=>r.round===silentRoundNum) : null;
+      const silentAtks = silentRoundData ? Object.values(silentRoundData.attacks||{}) : [];
+      const allAtks = [...atks, ...silentAtks];
+      const correct=allAtks.filter(a=>a.correct);
+      const wrong=allAtks.filter(a=>!a.correct);
       const mh=mostHuntedNick(),lh=leastHuntedNick(),mt=mostTargeted(),lt=leastTargeted();
       const nickStats=atks.reduce((acc,a)=>{if(a.targetNick){acc[a.targetNick]=acc[a.targetNick]||{total:0,suc:0};acc[a.targetNick].total++;if(a.correct)acc[a.targetNick].suc++;}return acc;},{});
       return(
@@ -1509,6 +1545,19 @@ export default function App() {
         <div className="scr">
           <button className="btn bgh bsm" style={{width:'auto',marginBottom:12}} onClick={()=>setGameScreen(phase==='revealing'||phase==='ended'?'results':'attack')}>← رجوع</button>
 
+          {/* جولة الصمت — إخفاء كامل للإحصائيات للمتسابقين */}
+          {gameState?.silentPending && role!=='admin' ? (
+            <div style={{textAlign:'center',padding:'40px 20px'}}>
+              <div style={{fontSize:48,marginBottom:12}}>🤫</div>
+              <div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:'var(--blue)',marginBottom:8}}>
+                جولة الصمت
+              </div>
+              <div style={{fontSize:13,color:'var(--muted)',lineHeight:1.8}}>
+                النتائج محفوظة — ستظهر الإحصائيات عند إعلان المشرف
+              </div>
+            </div>
+          ) : (
+          <>
           <div className="tabs" style={{flexWrap:'wrap',gap:4}}>
             {tabs.map(([k,l])=>(
               <button key={k} className={`tab${statsTab===k?' on':''}`} style={{flex:'none',padding:'7px 10px',fontSize:11}}
@@ -1627,9 +1676,9 @@ export default function App() {
                 <div style={{fontFamily:'Cairo',fontSize:16,fontWeight:900,width:26,textAlign:'center',color:i===0?'var(--gold)':i===1?'rgba(200,200,220,.8)':i===2?'var(--red)':'var(--muted)'}}>
                   {i===0?'👑':i===1?'🥈':i===2?'🥉':i+1}
                 </div>
-                <Av p={p} sz={32} fs={12}/>
+                {/* المشرف يرى الأفاتار والاسم واللقب، المتسابق يرى اللقب فقط بدون أفاتار */}
+                {role==='admin'&&<Av p={p} sz={32} fs={12}/>}
                 <div style={{flex:1}}>
-                  {/* المشرف يرى الاسم واللقب، المتسابق يرى اللقب فقط */}
                   {role==='admin'
                     ?<><div style={{fontWeight:700,fontSize:13}}>{p.name}</div>
                       <div style={{fontSize:11,color:'var(--gold)'}}>"{p.nick}"</div></>
@@ -1698,6 +1747,8 @@ export default function App() {
             <div style={{fontSize:11,color:'var(--gold)',fontWeight:700,marginBottom:12}}>🕵️ السجل الكامل — للمشرف فقط</div>
             {renderFullLog(false)}
           </>}
+          </>
+          )}
         </div>
       );
     }
