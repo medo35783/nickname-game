@@ -322,6 +322,7 @@ export default function App() {
   /* ── SPECIAL GAME MODES ── */
   const [poisonNick, setPoisonNick]     = useState('');   // admin sets poison nick
   const [silentRound, setSilentRound]   = useState(false); // fallback local
+  const [specialRound, setSpecialRound] = useState(1); // 1=عادية، 2=مزدوجة، 3=اندفاع
   // الحالة الفعلية من Firebase
   const isSilentActive = gameState?.silentActive || silentRound;
   const [pendingSilent, setPendingSilent] = useState(null); // stored silent round data
@@ -337,10 +338,11 @@ export default function App() {
   const elimPlayers  = playersList.filter(p=>p.status!=='active');
   const attacksList  = Object.values(attacks||{});
   const submittedCount = attacksList.length;
-  const allSubmitted = activePlayers.length > 0 && submittedCount >= activePlayers.length;
+  const allSubmitted = activePlayers.length > 0 && submittedCount >= activePlayers.length * attacksPerRound;
   const phase        = gameState?.phase || 'lobby';
   const roundNum     = gameState?.roundNum || 0;
-  const roundOrder   = gameState?.roundOrder || {nicks:[], names:[]};
+  const roundOrder      = gameState?.roundOrder || {nicks:[], names:[]};
+  const attacksPerRound = gameState?.attacksPerRound || 1; // هجمات مسموحة لكل لاعب
   const deadline     = gameState?.deadline || null;
   const allRoundsList= Object.values(allRoundsData||{}).sort((a,b)=>a.round-b.round);
   const allAttacksFlat = allRoundsList.flatMap(r=>Object.values(r.attacks||{}));
@@ -382,7 +384,8 @@ export default function App() {
       const rem = deadline - Date.now();
       if(rem<=0){
         setCountdown(0);
-        if(phase==='attacking' && role==='admin') doReveal();
+        // انتهى الوقت — لا كشف تلقائي، المشرف فقط يقرر
+        // doReveal() محذوف عمداً
       } else {
         setCountdown(rem);
         // Countdown sounds
@@ -543,7 +546,7 @@ export default function App() {
       }
       // check nick not taken
       const existingNicks = existingPlayers.flatMap(([,p])=>[p.nick,p.nick2].filter(Boolean));
-      if(existingNicks.includes(joinNick.trim())){setJoinErr('اللقب مأخوذ — اختر لقباً آخر');return;}
+      if(existingNicks.includes(joinNick.trim())){setJoinErr('⚠️ هذا اللقب مأخوذ من متسابق آخر — اختر لقباً مختلفاً');return;}
       // Validate nick2 if nickMode=2
       if(roomNickMode===2){
         if(!joinNick2.trim()){setJoinErr('أدخل لقبك الثاني');setJoinLoading(false);return;}
@@ -643,8 +646,10 @@ export default function App() {
       deadline: dl,
       roundOrder: { nicks:allNicks, names:allNames },
       silentActive: false,
-      poisonPenalized: null, // إعادة ضبط عقوبة اللقب المسموم
+      poisonPenalized: null,
+      attacksPerRound: specialRound, // عدد الهجمات للجولة
     });
+    setSpecialRound(1); // أعد للعادي بعد كل جولة
     notify(`🔔 الجولة ${rn} بدأت!`, 'gold');
   };
 
@@ -700,9 +705,9 @@ export default function App() {
     }
 
     // Block double submit in same round
-    const alreadyAttacked = Object.values(attacks||{}).some(a=>a.attackerNick===attackerNick);
-    if(alreadyAttacked){
-      notify('❌ هاجمت بالفعل في هذه الجولة','error');
+    const myAttacksCount = Object.values(attacks||{}).filter(a=>a.attackerNick===attackerNick).length;
+    if(myAttacksCount >= attacksPerRound){
+      notify(`❌ وصلت للحد الأقصى (${attacksPerRound} هجمة) في هذه الجولة`,'error');
       return;
     }
 
@@ -721,9 +726,14 @@ export default function App() {
       correct,
       time: Date.now(),
     });
-    setMySubmitted(true);
+    const myNewCount = myAttacksCount + 1;
+    if(myNewCount >= attacksPerRound) setMySubmitted(true);
     setProxyFor(null);
-    notify('✅ تم إرسال الهجوم!', 'gold');
+    if(attacksPerRound > 1){
+      notify(`✅ هجمة ${myNewCount}/${attacksPerRound} — ${myNewCount < attacksPerRound ? 'يمكنك هجوم آخر!' : 'اكتملت هجماتك!'}`, 'gold');
+    } else {
+      notify('✅ تم إرسال الهجوم!', 'gold');
+    }
   };
 
   /* ══ ADMIN: REVEAL ══ */
@@ -1179,10 +1189,11 @@ export default function App() {
             <div style={{fontSize:16}}>📨</div>
             <div style={{flex:1}}>
               <div style={{fontSize:13,fontWeight:700}}>
-                {submittedCount}/{activePlayers.length} أرسلوا هجماتهم
+                {submittedCount}/{activePlayers.length * attacksPerRound} هجمة
+                {attacksPerRound>1&&<span style={{fontSize:11,color:'var(--gold)',marginRight:6}}> ({attacksPerRound} لكل لاعب)</span>}
                 {allSubmitted&&<span style={{color:'var(--green)',fontSize:12,marginRight:6}}>✓ اكتمل!</span>}
               </div>
-              <div className="counter-track mt2"><div className="counter-fill" style={{width:`${(submittedCount/Math.max(activePlayers.length,1))*100}%`}}/></div>
+              <div className="counter-track mt2"><div className="counter-fill" style={{width:`${(submittedCount/Math.max(activePlayers.length*attacksPerRound,1))*100}%`}}/></div>
             </div>
             {allSubmitted&&role==='admin'&&<button className="btn bv bxs" onClick={doReveal}>كشف ▶</button>}
           </div>
@@ -1383,6 +1394,27 @@ export default function App() {
               </select>
               {poisonNick&&<button className="btn bgh bxs" onClick={()=>setPoisonNick('')}>✕</button>}
             </div>
+          </div>
+
+          {/* الجولات الخاصة */}
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:12,color:'var(--gold)',fontWeight:700,marginBottom:6}}>⚡ نوع الجولة القادمة</div>
+            <div style={{fontSize:11,color:'var(--muted)',marginBottom:8}}>يُطبق على الجولة التالية فقط</div>
+            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+              {[
+                [1,'🗡️ عادية','bgh'],
+                [2,'⚔️ مزدوجة','bgh'],
+                [3,'⚡ الاندفاع','bgh'],
+              ].map(([n,label,cls])=>(
+                <button key={n} className={`btn ${specialRound===n?'bg':cls} bsm`} style={{flex:1}}
+                  onClick={()=>setSpecialRound(n)}>
+                  {label}{n>1&&<span style={{fontSize:9,opacity:.7}}> ({n} هجمات)</span>}
+                </button>
+              ))}
+            </div>
+            {specialRound>1&&<div style={{marginTop:6,fontSize:11,color:'var(--gold)',background:'rgba(240,192,64,.07)',borderRadius:7,padding:'6px 10px'}}>
+              ✨ الجولة القادمة: {specialRound===2?'⚔️ مزدوجة — هجومان لكل لاعب':'⚡ الاندفاع — ثلاثة هجمات لكل لاعب'}
+            </div>}
           </div>
 
           {/* جولة الصمت */}
