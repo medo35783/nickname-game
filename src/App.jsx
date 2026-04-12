@@ -338,12 +338,12 @@ export default function App() {
   const elimPlayers  = playersList.filter(p=>p.status!=='active');
   const attacksList  = Object.values(attacks||{});
   const submittedCount = attacksList.length;
-  const allSubmitted = activePlayers.length > 0 && submittedCount >= activePlayers.length * attacksPerRound;
   const phase        = gameState?.phase || 'lobby';
   const roundNum     = gameState?.roundNum || 0;
   const roundOrder      = gameState?.roundOrder || {nicks:[], names:[]};
   const attacksPerRound = gameState?.attacksPerRound || 1; // هجمات مسموحة لكل لاعب
   const deadline     = gameState?.deadline || null;
+  const allSubmitted = activePlayers.length > 0 && submittedCount >= activePlayers.length * attacksPerRound;
   const allRoundsList= Object.values(allRoundsData||{}).sort((a,b)=>a.round-b.round);
   const allAttacksFlat = allRoundsList.flatMap(r=>Object.values(r.attacks||{}));
   // الأشرس — يُحسب دائماً من كل الجولات
