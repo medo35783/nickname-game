@@ -320,14 +320,13 @@ export default function App() {
   const [countdown, setCountdown] = useState(null);
 
   /* ── SPECIAL GAME MODES ── */
-  const [poisonNick, setPoisonNick]     = useState('');   // local fallback
-  // اقرأ القيم من Firebase دائماً
-  const activePoisonNick  = gameState?.poisonNick  || poisonNick;
-  const activeSpecialRound = gameState?.specialRound || specialRound;
-  const [silentRound, setSilentRound]   = useState(false); // fallback local
-  const [specialRound, setSpecialRound] = useState(1); // 1=عادية، 2=مزدوجة، 3=اندفاع
-  // الحالة الفعلية من Firebase
-  const isSilentActive = gameState?.silentActive || silentRound;
+  const [poisonNick, setPoisonNick]     = useState('');
+  const [silentRound, setSilentRound]   = useState(false);
+  const [specialRound, setSpecialRound] = useState(1);
+  // اقرأ القيم من Firebase — تعريفها بعد الـ state
+  const activePoisonNick   = gameState?.poisonNick   || poisonNick;
+  const activeSpecialRound = gameState?.specialRound  || specialRound;
+  const isSilentActive     = gameState?.silentActive  || silentRound;
   const [pendingSilent, setPendingSilent] = useState(null); // stored silent round data
   const [exitAnnounce, setExitAnnounce] = useState(null);  // cinematic exit {nick,name,eliminatedBy}
   const [flipCards, setFlipCards]       = useState({});    // {nick: flipped bool}
