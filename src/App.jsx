@@ -346,6 +346,8 @@ export default function App() {
   const attacksPerRound = gameState?.attacksPerRound || 1; // هجمات مسموحة لكل لاعب
   const deadline     = gameState?.deadline || null;
   const allSubmitted = activePlayers.length > 0 && submittedCount >= activePlayers.length * attacksPerRound;
+  // هل المتسابق الحالي أتم هجماته؟ — نحسب من Firebase لا من state محلي
+  const myAttacksDone = attacksList.filter(a=>a.attackerNick===myNickLocal).length >= attacksPerRound;
   const allRoundsList= Object.values(allRoundsData||{}).sort((a,b)=>a.round-b.round);
   const allAttacksFlat = allRoundsList.flatMap(r=>Object.values(r.attacks||{}));
   // الأشرس — يُحسب دائماً من كل الجولات
@@ -734,11 +736,10 @@ export default function App() {
     const myNewCount = myAttacksCount + 1;
     if(myNewCount >= attacksPerRound){
       setMySubmitted(true);
-    } else {
-      // لم يكتمل العدد — أعد تهيئة الاختيار للهجمة التالية
-      setMyNick(null);
-      setMyGuess(null);
     }
+    // دائماً أعد تهيئة الاختيار بعد كل هجمة
+    setMyNick(null);
+    setMyGuess(null);
     setProxyFor(null);
     if(attacksPerRound > 1){
       notify(`✅ هجمة ${myNewCount}/${attacksPerRound}${myNewCount < attacksPerRound ? ' — هاجم مرة أخرى!' : ' — اكتملت هجماتك!'}`, 'gold');
@@ -1260,7 +1261,7 @@ export default function App() {
           </div>}
 
           {/* SUBMITTED */}
-          {mySubmitted&&!proxyFor?(
+          {(mySubmitted||myAttacksDone)&&!proxyFor?(
             <div className="card">
               <div className="waiting-box">
                 <div className="waiting-icon">⏳</div>
