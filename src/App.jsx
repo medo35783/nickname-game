@@ -709,9 +709,10 @@ export default function App() {
     }
 
     // Block double submit in same round
+    // احسب هجمات هذا المهاجم فقط من Firebase المحدّث
     const myAttacksCount = Object.values(attacks||{}).filter(a=>a.attackerNick===attackerNick).length;
     if(myAttacksCount >= attacksPerRound){
-      notify(`❌ وصلت للحد الأقصى (${attacksPerRound} هجمة) في هذه الجولة`,'error');
+      notify(`❌ وصلت للحد الأقصى — ${attacksPerRound} هجمة لكل لاعب في هذه الجولة`,'error');
       return;
     }
 
@@ -731,10 +732,16 @@ export default function App() {
       time: Date.now(),
     });
     const myNewCount = myAttacksCount + 1;
-    if(myNewCount >= attacksPerRound) setMySubmitted(true);
+    if(myNewCount >= attacksPerRound){
+      setMySubmitted(true);
+    } else {
+      // لم يكتمل العدد — أعد تهيئة الاختيار للهجمة التالية
+      setMyNick(null);
+      setMyGuess(null);
+    }
     setProxyFor(null);
     if(attacksPerRound > 1){
-      notify(`✅ هجمة ${myNewCount}/${attacksPerRound} — ${myNewCount < attacksPerRound ? 'يمكنك هجوم آخر!' : 'اكتملت هجماتك!'}`, 'gold');
+      notify(`✅ هجمة ${myNewCount}/${attacksPerRound}${myNewCount < attacksPerRound ? ' — هاجم مرة أخرى!' : ' — اكتملت هجماتك!'}`, 'gold');
     } else {
       notify('✅ تم إرسال الهجوم!', 'gold');
     }
@@ -1187,6 +1194,39 @@ export default function App() {
             </div>
           )}
 
+          {/* أدوات الإثارة — للمشرف في شاشة الهجوم */}
+          {role==='admin'&&<div className="card" style={{marginBottom:8,padding:'10px 12px'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+              <div style={{fontSize:12,fontWeight:700,color:'var(--gold)'}}>⚗️ أدوات الجولة القادمة</div>
+              <button className="btn bgh bxs" onClick={()=>setGameScreen('admin_live')}>👑 تحكم كامل</button>
+            </div>
+            {/* نوع الجولة */}
+            <div style={{display:'flex',gap:5,marginBottom:8}}>
+              {[[1,'🗡️ عادية'],[2,'⚔️ مزدوجة'],[3,'⚡ اندفاع']].map(([n,label])=>(
+                <button key={n} className={`btn ${activeSpecialRound===n?'bg':'bgh'} bxs`} style={{flex:1,fontSize:11}}
+                  onClick={async()=>{setSpecialRound(n);await update(gameRef(roomCode),{specialRound:n});}}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            {/* اللقب المسموم */}
+            <div style={{display:'flex',gap:6,alignItems:'center'}}>
+              <span style={{fontSize:11,color:'var(--muted)',flexShrink:0}}>☠️ المسموم:</span>
+              <select className="inp" style={{flex:1,fontSize:11,padding:'4px 8px'}} value={activePoisonNick}
+                onChange={async e=>{const v=e.target.value;setPoisonNick(v);await update(gameRef(roomCode),{poisonNick:v||null});}}>
+                <option value="">بدون</option>
+                {playersList.filter(p=>p.status==='active').flatMap(p=>[p.nick,p.nick2].filter(Boolean)).map(n=>(
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+              {/* جولة الصمت */}
+              <button className={`btn ${isSilentActive?'bb':'bgh'} bxs`} style={{flexShrink:0}}
+                onClick={async()=>{const v=!isSilentActive;setSilentRound(v);await update(gameRef(roomCode),{silentActive:v});}}>
+                {isSilentActive?'🤫 صمت':'🔕 صمت'}
+              </button>
+            </div>
+          </div>}
+
           {/* Timer */}
           <div className={`tbar${cdi.urgent?' urg':''}`}>
             <div style={{fontSize:20}}>{cdi.urgent?'🔴':'⏱️'}</div>
@@ -1353,10 +1393,35 @@ export default function App() {
           <button className="btn bg" style={{flex:1}} onClick={()=>extendTime(30*60*1000)}>+30د</button>
           <button className="btn bg" style={{flex:1}} onClick={()=>extendTime(60*60*1000)}>+ساعة</button>
         </div>
+        {/* جولة الصمت — زر الانتقال */}
+        {isSilentActive&&<div className="silent-badge" style={{marginBottom:8}}>
+          <span style={{fontSize:16}}>🤫</span>
+          <div style={{flex:1}}>
+            <strong>جولة الصمت مفعّلة</strong>
+            <div style={{fontSize:10,marginTop:2,opacity:.8}}>النتائج مخفية</div>
+          </div>
+          <button className="btn bb bxs" onClick={async()=>{
+            const currentAtks=Object.values(attacks||{});
+            const seenIds=new Set();const elimAtt={};
+            currentAtks.forEach(a=>{if(a.correct){if(!elimAtt[a.realOwnerId])elimAtt[a.realOwnerId]=[];elimAtt[a.realOwnerId].push(a.attackerNick);seenIds.add(a.realOwnerId);}});
+            const silentExits=playersList.filter(p=>seenIds.has(p.id)).map(p=>({playerId:p.id,nick:p.nick,nick2:p.nick2,name:p.name,attackers:elimAtt[p.id]||[],roundNum,initials:p.initials,colorIdx:p.colorIdx}));
+            const silentMissed=playersList.filter(p=>p.status==='active'&&!currentAtks.some(a=>a.attackerNick===p.nick)).map(p=>({playerId:p.id,missedRounds:(p.missedRounds||0)+1}));
+            const updates={};
+            updates[`rooms/${roomCode}/rounds/round_${roundNum}`]={round:roundNum,attacks:attacks||{},endedAt:Date.now(),silent:true};
+            const prev=gameState?.silentPending||{silentExits:[],silentMissed:[]};
+            updates[`rooms/${roomCode}/game/silentPending`]={silentExits:[...(prev.silentExits||[]),...silentExits],silentMissed:[...(prev.silentMissed||[]),...silentMissed],roundNum};
+            setSilentRound(false);await update(gameRef(roomCode),{silentActive:false});
+            await set(ref(db,`rooms/${roomCode}/currentRound`),{attacks:{}});
+            await update(ref(db),updates);
+            await launchRound(roundNum+1);
+            notify('🤫 انتقلنا للجولة التالية','info');
+          }}>⏭️ الجولة التالية</button>
+        </div>}
+
         {/* كشف نتائج الجولة */}
-        <button className="btn bv" style={{marginBottom:8}} onClick={doReveal}>
+        {!isSilentActive&&<button className="btn bv" style={{marginBottom:8}} onClick={doReveal}>
           🔓 كشف نتائج الجولة {roundNum}
-        </button>
+        </button>}
 
         {/* فاصل واضح */}
         <div style={{margin:'4px 0 10px',padding:'8px 12px',background:'rgba(255,255,255,.04)',borderRadius:8,fontSize:11,color:'var(--muted)',textAlign:'center',border:'1px dashed rgba(255,255,255,.1)'}}>
