@@ -320,7 +320,10 @@ export default function App() {
   const [countdown, setCountdown] = useState(null);
 
   /* ── SPECIAL GAME MODES ── */
-  const [poisonNick, setPoisonNick]     = useState('');   // admin sets poison nick
+  const [poisonNick, setPoisonNick]     = useState('');   // local fallback
+  // اقرأ القيم من Firebase دائماً
+  const activePoisonNick  = gameState?.poisonNick  || poisonNick;
+  const activeSpecialRound = gameState?.specialRound || specialRound;
   const [silentRound, setSilentRound]   = useState(false); // fallback local
   const [specialRound, setSpecialRound] = useState(1); // 1=عادية، 2=مزدوجة، 3=اندفاع
   // الحالة الفعلية من Firebase
@@ -486,9 +489,10 @@ export default function App() {
     const {name, nick, nick2} = form;
     if(!name.trim()||!nick.trim()){notify('أدخل الاسم واللقب','error');return;}
     if(nickMode===2&&!nick2.trim()){notify('أدخل اللقب الثاني','error');return;}
-    const allNicks = playersList.flatMap(p=>[p.nick,p.nick2].filter(Boolean));
-    if(allNicks.includes(nick.trim())){notify('اللقب الأول مأخوذ!','error');return;}
-    if(nickMode===2&&allNicks.includes(nick2.trim())){notify('اللقب الثاني مأخوذ!','error');return;}
+    const allNicks = playersList.flatMap(p=>[p.nick,p.nick2].filter(Boolean)).map(n=>n?.trim().toLowerCase());
+    if(allNicks.includes(nick.trim().toLowerCase())){notify(`⚠️ اللقب "${nick.trim()}" مأخوذ — اختر لقباً آخر`,'error');return;}
+    if(nickMode===2&&allNicks.includes(nick2.trim().toLowerCase())){notify(`⚠️ اللقب "${nick2.trim()}" مأخوذ — اختر لقباً آخر`,'error');return;}
+    if(nickMode===2&&nick.trim().toLowerCase()===nick2.trim().toLowerCase()){notify('اللقبان متطابقان — يجب أن يختلفا','error');return;}
     const newRef = push(playersRef(roomCode));
     await set(newRef, {
       name:name.trim(), nick:nick.trim(),
@@ -546,7 +550,8 @@ export default function App() {
       }
       // check nick not taken
       const existingNicks = existingPlayers.flatMap(([,p])=>[p.nick,p.nick2].filter(Boolean));
-      if(existingNicks.includes(joinNick.trim())){setJoinErr('⚠️ هذا اللقب مأخوذ من متسابق آخر — اختر لقباً مختلفاً');return;}
+      const existingNicksLower = existingNicks.map(n=>n?.trim().toLowerCase());
+      if(existingNicksLower.includes(joinNick.trim().toLowerCase())){setJoinErr(`⚠️ اللقب "${joinNick.trim()}" مأخوذ — اختر لقباً مختلفاً`);return;}
       // Validate nick2 if nickMode=2
       if(roomNickMode===2){
         if(!joinNick2.trim()){setJoinErr('أدخل لقبك الثاني');setJoinLoading(false);return;}
@@ -647,9 +652,9 @@ export default function App() {
       roundOrder: { nicks:allNicks, names:allNames },
       silentActive: false,
       poisonPenalized: null,
-      attacksPerRound: specialRound, // عدد الهجمات للجولة
+      attacksPerRound: activeSpecialRound, // عدد الهجمات للجولة
     });
-    setSpecialRound(1); // أعد للعادي بعد كل جولة
+    setSpecialRound(1); await update(gameRef(roomCode),{specialRound:1,poisonNick:null}); // أعد للعادي
     notify(`🔔 الجولة ${rn} بدأت!`, 'gold');
   };
 
@@ -752,8 +757,8 @@ export default function App() {
   const processReveal = async (currentAttacks) => {
     playSound('suspense');
 
-    if(poisonNick) {
-      const poisonAttacks = currentAttacks.filter(a=>a.targetNick===poisonNick&&!a.correct);
+    if(activePoisonNick) {
+      const poisonAttacks = currentAttacks.filter(a=>a.targetNick===activePoisonNick&&!a.correct);
       if(poisonAttacks.length>0) {
         setTimeout(()=>{ playSound('poison_hit'); notify(`☠️ ${poisonAttacks.length} لاعب أصاب اللقب المسموم — ممنوعون من الجولة القادمة!`,'info'); },600);
         // احفظ المعاقبين في Firebase
@@ -1165,8 +1170,18 @@ export default function App() {
             </div>
           )}
 
+          {/* Special round banner */}
+          {attacksPerRound>1&&(
+            <div style={{background:'rgba(240,192,64,.08)',border:'1px solid rgba(240,192,64,.3)',borderRadius:10,padding:'8px 12px',marginBottom:8,display:'flex',alignItems:'center',gap:8,fontSize:12}}>
+              <span>{attacksPerRound===2?'⚔️':'⚡'}</span>
+              <span style={{color:'var(--gold)',fontWeight:700}}>
+                {attacksPerRound===2?'جولة مزدوجة':'جولة الاندفاع'} — لديك {attacksPerRound} هجمات هذه الجولة
+              </span>
+            </div>
+          )}
+
           {/* Poison nick banner */}
-          {poisonNick&&(
+          {activePoisonNick&&(
             <div className="poison-badge">
               <span style={{fontSize:16}}>☠️</span>
               <span>يوجد <strong>لقب مسموم</strong> — إذا هاجمته وأخطأت تخسر جولة هجوم!</span>
@@ -1230,7 +1245,7 @@ export default function App() {
                     const isInactive=owner&&owner.status==='inactive';
                     const isElim=isEliminated;
                     return(
-                      <div key={i} className={`nt${isElim?' nd':myNick===nick?' nsel':poisonNick===nick?' poisoned':''}`}
+                      <div key={i} className={`nt${isElim?' nd':myNick===nick?' nsel':activePoisonNick===nick?' poisoned':''}`}
                         onClick={()=>{if(!isElim){setMyNick(nick);setMyGuess(null);}}}>
                         <div>{nick}</div>
                         {isElim&&<div className="nt-sub">✕ ج{owner.eliminatedRound}</div>}
@@ -1386,13 +1401,20 @@ export default function App() {
             <div style={{fontSize:12,color:'var(--purple)',fontWeight:700,marginBottom:6}}>☠️ اللقب المسموم</div>
             <div style={{fontSize:11,color:'var(--muted)',marginBottom:6}}>من يهاجمه ويخطئ يخسر جولة هجوم</div>
             <div style={{display:'flex',gap:6}}>
-              <select className="inp" style={{flex:1,fontSize:12}} value={poisonNick} onChange={e=>setPoisonNick(e.target.value)}>
+              <select className="inp" style={{flex:1,fontSize:12}} value={activePoisonNick} onChange={async e=>{
+                const val=e.target.value;
+                setPoisonNick(val);
+                await update(gameRef(roomCode),{poisonNick:val||null});
+              }}>
                 <option value="">بدون لقب مسموم</option>
                 {playersList.filter(p=>p.status==='active').flatMap(p=>[p.nick,p.nick2].filter(Boolean)).map(n=>(
                   <option key={n} value={n}>{n}</option>
                 ))}
               </select>
-              {poisonNick&&<button className="btn bgh bxs" onClick={()=>setPoisonNick('')}>✕</button>}
+              {activePoisonNick&&<button className="btn bgh bxs" onClick={async()=>{
+                setPoisonNick('');
+                await update(gameRef(roomCode),{poisonNick:null});
+              }}>✕</button>}
             </div>
           </div>
 
@@ -1406,14 +1428,17 @@ export default function App() {
                 [2,'⚔️ مزدوجة','bgh'],
                 [3,'⚡ الاندفاع','bgh'],
               ].map(([n,label,cls])=>(
-                <button key={n} className={`btn ${specialRound===n?'bg':cls} bsm`} style={{flex:1}}
-                  onClick={()=>setSpecialRound(n)}>
+                <button key={n} className={`btn ${activeSpecialRound===n?'bg':cls} bsm`} style={{flex:1}}
+                  onClick={async()=>{
+                    setSpecialRound(n);
+                    await update(gameRef(roomCode),{specialRound:n});
+                  }}>
                   {label}{n>1&&<span style={{fontSize:9,opacity:.7}}> ({n} هجمات)</span>}
                 </button>
               ))}
             </div>
-            {specialRound>1&&<div style={{marginTop:6,fontSize:11,color:'var(--gold)',background:'rgba(240,192,64,.07)',borderRadius:7,padding:'6px 10px'}}>
-              ✨ الجولة القادمة: {specialRound===2?'⚔️ مزدوجة — هجومان لكل لاعب':'⚡ الاندفاع — ثلاثة هجمات لكل لاعب'}
+            {activeSpecialRound>1&&<div style={{marginTop:6,fontSize:11,color:'var(--gold)',background:'rgba(240,192,64,.07)',borderRadius:7,padding:'6px 10px'}}>
+              ✨ الجولة القادمة: {activeSpecialRound===2?'⚔️ مزدوجة — هجومان لكل لاعب':'⚡ الاندفاع — ثلاثة هجمات لكل لاعب'}
             </div>}
           </div>
 
