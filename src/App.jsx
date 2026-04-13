@@ -347,7 +347,9 @@ export default function App() {
   const deadline     = gameState?.deadline || null;
   const allSubmitted = activePlayers.length > 0 && submittedCount >= activePlayers.length * attacksPerRound;
   // هل المتسابق الحالي أتم هجماته؟ — نحسب من Firebase لا من state محلي
-  const myAttacksDone = attacksList.filter(a=>a.attackerNick===myNickLocal).length >= attacksPerRound;
+  // هل أتممت هجماتي؟ — بناء على Firebase مباشرة
+  const myDoneCount = attacksList.filter(a=>a.attackerNick===myNickLocal).length;
+  const myAttacksDone = myNickLocal ? myDoneCount >= attacksPerRound : false;
   const allRoundsList= Object.values(allRoundsData||{}).sort((a,b)=>a.round-b.round);
   const allAttacksFlat = allRoundsList.flatMap(r=>Object.values(r.attacks||{}));
   // الأشرس — يُحسب دائماً من كل الجولات
@@ -1109,11 +1111,11 @@ export default function App() {
       const displayNicks = [...new Set([...activeNicks, ...inactiveNicks])];
       // قائمة الأسماء — تخفي اسم اللاعب نفسه وأسماء الخارجين بالخمول
       const myPlayerId = myId || playersList.find(p=>p.nick===myNickLocal||p.nick2===myNickLocal)?.id;
-      const inactivePids = new Set(playersList.filter(p=>p.status==='inactive').map(p=>p.id));
+      // قائمة الأسماء: أخفِ نفسك فقط — الخامل يبقى مخفياً (اسمه ليس في القائمة)
       const displayNames = (roundOrder.names?.length>0
         ? roundOrder.names.map(id=>playersList.find(p=>p.id===id)).filter(Boolean)
-        : playersList
-      ).filter(p=> p.id !== myPlayerId && !inactivePids.has(p.id));
+        : playersList.filter(p=>p.status==='active')
+      ).filter(p=> p.id !== myPlayerId);
       const proxyPlayer  = proxyFor ? playersList.find(p=>p.id===proxyFor) : null;
 
       return(
@@ -1195,38 +1197,27 @@ export default function App() {
             </div>
           )}
 
-          {/* أدوات الإثارة — للمشرف في شاشة الهجوم */}
-          {role==='admin'&&<div className="card" style={{marginBottom:8,padding:'10px 12px'}}>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-              <div style={{fontSize:12,fontWeight:700,color:'var(--gold)'}}>⚗️ أدوات الجولة القادمة</div>
-              <button className="btn bgh bxs" onClick={()=>setGameScreen('admin_live')}>👑 تحكم كامل</button>
+          {/* إشعارات الجولة — للجميع بدون كشف تفاصيل */}
+          {isSilentActive&&(
+            <div style={{background:'rgba(79,163,224,.08)',border:'1px solid rgba(79,163,224,.3)',borderRadius:9,padding:'8px 12px',marginBottom:8,display:'flex',alignItems:'center',gap:8,fontSize:12,color:'var(--blue)'}}>
+              <span style={{fontSize:16}}>🤫</span>
+              <span><strong>جولة الصمت</strong> — النتائج لن تُعلن حتى يقرر المشرف</span>
             </div>
-            {/* نوع الجولة */}
-            <div style={{display:'flex',gap:5,marginBottom:8}}>
-              {[[1,'🗡️ عادية'],[2,'⚔️ مزدوجة'],[3,'⚡ اندفاع']].map(([n,label])=>(
-                <button key={n} className={`btn ${activeSpecialRound===n?'bg':'bgh'} bxs`} style={{flex:1,fontSize:11}}
-                  onClick={async()=>{setSpecialRound(n);await update(gameRef(roomCode),{specialRound:n});}}>
-                  {label}
-                </button>
-              ))}
+          )}
+          {activePoisonNick&&(
+            <div style={{background:'rgba(155,89,182,.08)',border:'1px solid rgba(155,89,182,.3)',borderRadius:9,padding:'8px 12px',marginBottom:8,display:'flex',alignItems:'center',gap:8,fontSize:12,color:'var(--purple)'}}>
+              <span style={{fontSize:16}}>☠️</span>
+              <span>تحذير: <strong>يوجد لقب مسموم</strong> في هذه الجولة — إذا هاجمته وأخطأت تخسر جولة هجوم!</span>
             </div>
-            {/* اللقب المسموم */}
-            <div style={{display:'flex',gap:6,alignItems:'center'}}>
-              <span style={{fontSize:11,color:'var(--muted)',flexShrink:0}}>☠️ المسموم:</span>
-              <select className="inp" style={{flex:1,fontSize:11,padding:'4px 8px'}} value={activePoisonNick}
-                onChange={async e=>{const v=e.target.value;setPoisonNick(v);await update(gameRef(roomCode),{poisonNick:v||null});}}>
-                <option value="">بدون</option>
-                {playersList.filter(p=>p.status==='active').flatMap(p=>[p.nick,p.nick2].filter(Boolean)).map(n=>(
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-              {/* جولة الصمت */}
-              <button className={`btn ${isSilentActive?'bb':'bgh'} bxs`} style={{flexShrink:0}}
-                onClick={async()=>{const v=!isSilentActive;setSilentRound(v);await update(gameRef(roomCode),{silentActive:v});}}>
-                {isSilentActive?'🤫 صمت':'🔕 صمت'}
-              </button>
+          )}
+          {attacksPerRound>1&&(
+            <div style={{background:'rgba(240,192,64,.08)',border:'1px solid rgba(240,192,64,.3)',borderRadius:9,padding:'8px 12px',marginBottom:8,display:'flex',alignItems:'center',gap:8,fontSize:12}}>
+              <span>{attacksPerRound===2?'⚔️':'⚡'}</span>
+              <span style={{color:'var(--gold)',fontWeight:700}}>
+                {attacksPerRound===2?'جولة مزدوجة':'جولة الاندفاع'} — لديك <strong>{attacksPerRound}</strong> هجمات هذه الجولة
+              </span>
             </div>
-          </div>}
+          )}
 
           {/* Timer */}
           <div className={`tbar${cdi.urgent?' urg':''}`}>
@@ -1285,7 +1276,7 @@ export default function App() {
                     const isInactive=owner&&owner.status==='inactive';
                     const isElim=isEliminated;
                     return(
-                      <div key={i} className={`nt${isElim?' nd':myNick===nick?' nsel':activePoisonNick===nick?' poisoned':''}`}
+                      <div key={i} className={`nt${isElim?' nd':myNick===nick?' nsel':''}`}
                         onClick={()=>{if(!isElim){setMyNick(nick);setMyGuess(null);}}}>
                         <div>{nick}</div>
                         {isElim&&<div className="nt-sub">✕ ج{owner.eliminatedRound}</div>}
