@@ -736,9 +736,7 @@ export default function App() {
       time: Date.now(),
     });
     const myNewCount = myAttacksCount + 1;
-    if(myNewCount >= attacksPerRound){
-      setMySubmitted(true);
-    }
+    // لا نحتاج setMySubmitted — myAttacksDone يحسب من Firebase
     // دائماً أعد تهيئة الاختيار بعد كل هجمة
     setMyNick(null);
     setMyGuess(null);
@@ -1145,58 +1143,6 @@ export default function App() {
             )}
           </div>
 
-          {/* Silent round banner */}
-          {isSilentActive&&(
-            <div className="silent-badge">
-              <span style={{fontSize:16}}>🤫</span>
-              <div style={{flex:1}}>
-                <strong>جولة الصمت مفعّلة</strong>
-                <div style={{fontSize:10,marginTop:2,opacity:.8}}>النتائج مخفية — اضغط الزر لبدء الجولة التالية سراً</div>
-              </div>
-              {role==='admin'&&<button className="btn bb bxs" onClick={async()=>{
-                // حفظ الجولة الحالية سراً والانتقال للتالية
-                const currentAtks = Object.values(attacks||{});
-                const seenIds=new Set();
-                const elimAtt={};
-                currentAtks.forEach(a=>{if(a.correct){if(!elimAtt[a.realOwnerId])elimAtt[a.realOwnerId]=[];elimAtt[a.realOwnerId].push(a.attackerNick);seenIds.add(a.realOwnerId);}});
-                const silentExits=playersList.filter(p=>seenIds.has(p.id)).map(p=>({playerId:p.id,nick:p.nick,nick2:p.nick2,name:p.name,attackers:elimAtt[p.id]||[],roundNum,initials:p.initials,colorIdx:p.colorIdx}));
-                const silentMissed=playersList.filter(p=>p.status==='active'&&!currentAtks.some(a=>a.attackerNick===p.nick)).map(p=>({playerId:p.id,missedRounds:(p.missedRounds||0)+1}));
-                const updates={};
-                updates[`rooms/${roomCode}/rounds/round_${roundNum}`]={round:roundNum,attacks:attacks||{},endedAt:Date.now(),silent:true};
-                const prev=gameState?.silentPending||{silentExits:[],silentMissed:[]};
-                updates[`rooms/${roomCode}/game/silentPending`]={
-                  silentExits:[...(prev.silentExits||[]),...silentExits],
-                  silentMissed:[...(prev.silentMissed||[]),...silentMissed],
-                  roundNum
-                };
-                setSilentRound(false); await update(gameRef(roomCode),{silentActive:false});
-                await update(ref(db),updates);
-                // امسح هجمات الجولة الحالية قبل بدء الجديدة
-                await set(ref(db,`rooms/${roomCode}/currentRound`),{attacks:{}});
-                await launchRound(roundNum+1);
-                notify('🤫 انتقلنا للجولة التالية — النتائج مخفية','info');
-              }}>⏭️ الجولة التالية</button>}
-            </div>
-          )}
-
-          {/* Special round banner */}
-          {attacksPerRound>1&&(
-            <div style={{background:'rgba(240,192,64,.08)',border:'1px solid rgba(240,192,64,.3)',borderRadius:10,padding:'8px 12px',marginBottom:8,display:'flex',alignItems:'center',gap:8,fontSize:12}}>
-              <span>{attacksPerRound===2?'⚔️':'⚡'}</span>
-              <span style={{color:'var(--gold)',fontWeight:700}}>
-                {attacksPerRound===2?'جولة مزدوجة':'جولة الاندفاع'} — لديك {attacksPerRound} هجمات هذه الجولة
-              </span>
-            </div>
-          )}
-
-          {/* Poison nick banner */}
-          {activePoisonNick&&(
-            <div className="poison-badge">
-              <span style={{fontSize:16}}>☠️</span>
-              <span>يوجد <strong>لقب مسموم</strong> — إذا هاجمته وأخطأت تخسر جولة هجوم!</span>
-            </div>
-          )}
-
           {/* إشعارات الجولة — للجميع بدون كشف تفاصيل */}
           {isSilentActive&&(
             <div style={{background:'rgba(79,163,224,.08)',border:'1px solid rgba(79,163,224,.3)',borderRadius:9,padding:'8px 12px',marginBottom:8,display:'flex',alignItems:'center',gap:8,fontSize:12,color:'var(--blue)'}}>
@@ -1252,7 +1198,7 @@ export default function App() {
           </div>}
 
           {/* SUBMITTED */}
-          {(mySubmitted||myAttacksDone)&&!proxyFor?(
+          {myAttacksDone&&!proxyFor?(
             <div className="card">
               <div className="waiting-box">
                 <div className="waiting-icon">⏳</div>
