@@ -345,7 +345,14 @@ export default function App() {
   const roundOrder      = gameState?.roundOrder || {nicks:[], names:[]};
   const attacksPerRound = gameState?.attacksPerRound || 1; // هجمات مسموحة لكل لاعب
   const deadline     = gameState?.deadline || null;
-  const allSubmitted = activePlayers.length > 0 && submittedCount >= activePlayers.length * attacksPerRound;
+  // allSubmitted: كل لاعب نشط أكمل عدد هجماته المطلوب
+  const playerAttackCounts = {};
+  attacksList.forEach(a=>{if(a.attackerNick)playerAttackCounts[a.attackerNick]=(playerAttackCounts[a.attackerNick]||0)+1;});
+  const allSubmitted = activePlayers.length > 0 && activePlayers.every(p=>{
+    const nicks=[p.nick,p.nick2].filter(Boolean);
+    const done=nicks.reduce((sum,n)=>sum+(playerAttackCounts[n]||0),0);
+    return done>=attacksPerRound;
+  });
   // هل المتسابق الحالي أتم هجماته؟ — نحسب من Firebase لا من state محلي
   // هل أتممت هجماتي؟ — بناء على Firebase مباشرة
   const myDoneCount = attacksList.filter(a=>a.attackerNick===myNickLocal).length;
@@ -657,7 +664,7 @@ export default function App() {
       poisonPenalized: null,
       attacksPerRound: activeSpecialRound, // عدد الهجمات للجولة
     });
-    setSpecialRound(1); await update(gameRef(roomCode),{specialRound:1,poisonNick:null}); // أعد للعادي
+    setSpecialRound(1); await update(gameRef(roomCode),{specialRound:1,poisonNick:null,poisonPenalized:null}); // أعد للعادي
     notify(`🔔 الجولة ${rn} بدأت!`, 'gold');
   };
 
@@ -675,10 +682,10 @@ export default function App() {
 
     const attackerNick = attackerNickOverride || myNickLocal || '(لاعب)';
 
-    // Block if penalized by poison nick last round
+    // Block if penalized by poison nick — مخزن في game.poisonPenalized
     const penalized = gameState?.poisonPenalized||[];
-    if(penalized.includes(attackerNick)){
-      notify('☠️ أنت ممنوع من الهجوم هذه الجولة بسبب اللقب المسموم!','error');
+    if(penalized.includes(attackerNick)||penalized.includes(myNickLocal)){
+      notify('☠️ أنت ممنوع من الهجوم هذه الجولة — عقوبة اللقب المسموم!','error');
       return;
     }
 
@@ -1309,25 +1316,96 @@ export default function App() {
     /* ── ADMIN LIVE ── */
     if(gameScreen==='admin_live') return(
       <div className="scr">
-        <button className="btn bgh bsm" style={{width:'auto',marginBottom:12}} onClick={()=>setGameScreen('attack')}>← رجوع للعبة</button>
-        <div className="sg sg4">
-          <div className="sbox"><div className="snum">{roundNum}</div><div className="slbl">الجولة</div></div>
-          <div className="sbox"><div className="snum" style={{color:'var(--green)'}}>{activePlayers.length}</div><div className="slbl">نشطون</div></div>
-          <div className="sbox"><div className="snum" style={{color:'var(--gold)'}}>{submittedCount}</div><div className="slbl">أرسلوا</div></div>
-          <div className="sbox"><div className="snum" style={{color:'var(--red)'}}>{elimPlayers.length}</div><div className="slbl">خارجون</div></div>
-        </div>
-        <div className={`tbar${cdi.urgent?' urg':''}`}>
-          <div style={{fontSize:18}}>{cdi.urgent?'🔴':'⏱️'}</div>
-          <div style={{flex:1}}><div className={`tval${cdi.urgent?' urg':''}`}>{cdi.label}</div><div className="tlbl">متبقي</div></div>
-        </div>
-        <div className="counter-bar">
-          <div style={{fontSize:16}}>📨</div>
-          <div style={{flex:1}}>
-            <div style={{fontSize:13,fontWeight:700}}>{submittedCount}/{activePlayers.length} أرسلوا</div>
-            <div className="counter-track mt2"><div className="counter-fill" style={{width:`${(submittedCount/Math.max(activePlayers.length,1))*100}%`}}/></div>
+        <button className="btn bgh bsm" style={{width:'auto',marginBottom:12}} onClick={()=>setGameScreen('attack')}>← رجوع</button>
+
+        {/* ══ أدوات الإثارة — فوق دائماً ══ */}
+        <div className="card" style={{background:'linear-gradient(135deg,rgba(240,192,64,.06),rgba(155,89,182,.06))',border:'1px solid rgba(240,192,64,.2)',marginBottom:10}}>
+          <div className="ctitle">⚗️ أدوات الجولة القادمة</div>
+
+          {/* نوع الجولة */}
+          <div style={{marginBottom:10}}>
+            <div style={{fontSize:11,color:'var(--muted)',marginBottom:6}}>⚡ نوع الجولة</div>
+            <div style={{display:'flex',gap:5}}>
+              {[[1,'🗡️ عادية'],[2,'⚔️ مزدوجة'],[3,'⚡ اندفاع']].map(([n,label])=>(
+                <button key={n} className={`btn ${activeSpecialRound===n?'bg':'bgh'} bsm`} style={{flex:1,fontSize:11}}
+                  onClick={async()=>{setSpecialRound(n);await update(gameRef(roomCode),{specialRound:n});}}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* اللقب المسموم */}
+          <div style={{marginBottom:10}}>
+            <div style={{fontSize:11,color:'var(--purple)',marginBottom:6}}>☠️ اللقب المسموم</div>
+            <div style={{display:'flex',gap:6}}>
+              <select className="inp" style={{flex:1,fontSize:12,padding:'6px 10px'}} value={activePoisonNick}
+                onChange={async e=>{const v=e.target.value;setPoisonNick(v);await update(gameRef(roomCode),{poisonNick:v||null});}}>
+                <option value="">بدون لقب مسموم</option>
+                {playersList.filter(p=>p.status==='active').flatMap(p=>[p.nick,p.nick2].filter(Boolean)).map(n=>(
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+              {activePoisonNick&&<button className="btn bp bxs" onClick={async()=>{setPoisonNick('');await update(gameRef(roomCode),{poisonNick:null});}}>✕</button>}
+            </div>
+          </div>
+
+          {/* جولة الصمت + الكشف */}
+          <div>
+            <div style={{fontSize:11,color:'var(--blue)',marginBottom:6}}>🤫 جولة الصمت</div>
+            <div style={{display:'flex',gap:6}}>
+              <button className={`btn ${isSilentActive?'bb':'bgh'} bsm`} style={{flex:1}}
+                onClick={async()=>{const v=!isSilentActive;setSilentRound(v);await update(gameRef(roomCode),{silentActive:v});}}>
+                {isSilentActive?'🤫 مفعّلة — إلغاء':'تفعيل الصمت'}
+              </button>
+              {isSilentActive&&<button className="btn bb bsm" style={{flex:1}} onClick={async()=>{
+                const currentAtks=Object.values(attacks||{});
+                const seenIds=new Set();const elimAtt={};
+                currentAtks.forEach(a=>{if(a.correct){if(!elimAtt[a.realOwnerId])elimAtt[a.realOwnerId]=[];elimAtt[a.realOwnerId].push(a.attackerNick);seenIds.add(a.realOwnerId);}});
+                const silentExits=playersList.filter(p=>seenIds.has(p.id)).map(p=>({playerId:p.id,nick:p.nick,nick2:p.nick2,name:p.name,attackers:elimAtt[p.id]||[],roundNum,initials:p.initials,colorIdx:p.colorIdx}));
+                const silentMissed=playersList.filter(p=>p.status==='active'&&!currentAtks.some(a=>a.attackerNick===p.nick)).map(p=>({playerId:p.id,missedRounds:(p.missedRounds||0)+1}));
+                const updates={};
+                updates[`rooms/${roomCode}/rounds/round_${roundNum}`]={round:roundNum,attacks:attacks||{},endedAt:Date.now(),silent:true};
+                const prev=gameState?.silentPending||{silentExits:[],silentMissed:[]};
+                updates[`rooms/${roomCode}/game/silentPending`]={silentExits:[...(prev.silentExits||[]),...silentExits],silentMissed:[...(prev.silentMissed||[]),...silentMissed],roundNum};
+                setSilentRound(false);await update(gameRef(roomCode),{silentActive:false});
+                await set(ref(db,`rooms/${roomCode}/currentRound`),{attacks:{}});
+                await update(ref(db),updates);
+                await launchRound(roundNum+1);
+                notify('🤫 جولة الصمت — انتقلنا للجولة التالية','info');
+              }}>⏭️ الجولة التالية</button>}
+            </div>
+            {gameState?.silentPending&&<button className="btn bv bsm mt2" style={{width:'100%'}} onClick={async()=>{
+              const sp=gameState.silentPending;const updates={};
+              sp.silentExits?.forEach(ex=>{const p=playersList.find(pl=>pl.nick===ex.nick||pl.id===ex.playerId);
+                if(p){updates[`rooms/${roomCode}/players/${p.id}/status`]=ex.inactive?'inactive':'eliminated';
+                  updates[`rooms/${roomCode}/players/${p.id}/eliminatedRound`]=ex.roundNum;
+                  if(!ex.inactive)updates[`rooms/${roomCode}/players/${p.id}/eliminatedBy`]=ex.attackers?.join(' + ')||'لاعب';}});
+              updates[`rooms/${roomCode}/game/silentPending`]=null;
+              updates[`rooms/${roomCode}/game/phase`]='revealing';
+              await update(ref(db),updates);playSound('suspense');
+              notify('🔓 كُشفت نتائج الجولة الصامتة!','gold');
+            }}>🔓 كشف نتائج الجولة الصامتة الآن</button>}
           </div>
         </div>
-        <div style={{display:'flex',gap:7,marginBottom:10}}>
+
+        {/* ══ الإحصاءات السريعة ══ */}
+        <div className="sg sg4" style={{marginBottom:8}}>
+          <div className="sbox"><div className="snum">{roundNum}</div><div className="slbl">الجولة</div></div>
+          <div className="sbox"><div className="snum" style={{color:'var(--green)'}}>{activePlayers.length}</div><div className="slbl">نشطون</div></div>
+          <div className="sbox"><div className="snum" style={{color:'var(--gold)'}}>{Object.keys(playerAttackCounts).length}</div><div className="slbl">هاجموا</div></div>
+          <div className="sbox"><div className="snum" style={{color:'var(--red)'}}>{elimPlayers.length}</div><div className="slbl">خارجون</div></div>
+        </div>
+
+        {/* العداد والوقت */}
+        <div className={`tbar${cdi.urgent?' urg':''}`}>
+          <div style={{fontSize:18}}>{cdi.urgent?'🔴':'⏱️'}</div>
+          <div style={{flex:1}}><div className={`tval${cdi.urgent?' urg':''}`}>{cdi.label}</div><div className="tlbl">متبقي — الجولة {roundNum}</div></div>
+        </div>
+
+        {/* كشف + تمديد */}
+        <div style={{display:'flex',gap:7,marginBottom:8}}>
+          {!isSilentActive&&<button className="btn bv" style={{flex:2}} onClick={doReveal}>🔓 كشف الجولة {roundNum}</button>}
           <button className="btn bg" style={{flex:1}} onClick={()=>extendTime(30*60*1000)}>+30د</button>
           <button className="btn bg" style={{flex:1}} onClick={()=>extendTime(60*60*1000)}>+ساعة</button>
         </div>
@@ -1376,17 +1454,20 @@ export default function App() {
         <div className="card">
           <div className="ctitle">📋 حالة اللاعبين</div>
           {activePlayers.map(p=>{
-            const sent=attacksList.some(a=>a.attackerNick===p.nick);
+            const pNicks=[p.nick,p.nick2].filter(Boolean);
+            const pDone=pNicks.reduce((s,n)=>s+(playerAttackCounts[n]||0),0);
+            const allDone=pDone>=attacksPerRound;
             return(
               <div key={p.id} className="pi"><Av p={p}/>
                 <div className="pi-info">
                   <div className="pi-name">{p.name} — <span style={{color:'var(--gold)'}}>{p.nick}</span></div>
-                  <div style={{fontSize:11,color:sent?'var(--green)':'var(--muted)',marginTop:1}}>
-                    {sent?'✅ أرسل':'⏳ لم يرسل'}{p.missedRounds>0?` · ⚠️ غاب ${p.missedRounds}`:''}
+                  <div style={{fontSize:11,color:allDone?'var(--green)':pDone>0?'var(--gold)':'var(--muted)',marginTop:1}}>
+                    {allDone?'✅ أكمل':pDone>0?`⚡ ${pDone}/${attacksPerRound} هجمات`:'⏳ لم يرسل'}
+                    {p.missedRounds>0?` · ⚠️ غاب ${p.missedRounds}`:''}
                   </div>
                 </div>
                 <div style={{display:'flex',gap:4}}>
-                  {!sent&&<button className="btn bb bxs" onClick={()=>{setProxyFor(p.id);setMyNick(null);setMyGuess(null);setMySubmitted(false);setGameScreen('attack');}}>🎮</button>}
+                  {!allDone&&<button className="btn bb bxs" onClick={()=>{setProxyFor(p.id);setMyNick(null);setMyGuess(null);setMySubmitted(false);setGameScreen('attack');}}>🎮</button>}
                   <button className="btn br bxs" onClick={()=>elimCheat(p.id)}>غش</button>
                 </div>
               </div>
@@ -1394,91 +1475,7 @@ export default function App() {
           })}
         </div>
 
-        {/* ══ أدوات المشرف الخاصة ══ */}
-        <div className="card">
-          <div className="ctitle">⚗️ أدوات الإثارة</div>
 
-          {/* اللقب المسموم */}
-          <div style={{marginBottom:12}}>
-            <div style={{fontSize:12,color:'var(--purple)',fontWeight:700,marginBottom:6}}>☠️ اللقب المسموم</div>
-            <div style={{fontSize:11,color:'var(--muted)',marginBottom:6}}>من يهاجمه ويخطئ يخسر جولة هجوم</div>
-            <div style={{display:'flex',gap:6}}>
-              <select className="inp" style={{flex:1,fontSize:12}} value={activePoisonNick} onChange={async e=>{
-                const val=e.target.value;
-                setPoisonNick(val);
-                await update(gameRef(roomCode),{poisonNick:val||null});
-              }}>
-                <option value="">بدون لقب مسموم</option>
-                {playersList.filter(p=>p.status==='active').flatMap(p=>[p.nick,p.nick2].filter(Boolean)).map(n=>(
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-              {activePoisonNick&&<button className="btn bgh bxs" onClick={async()=>{
-                setPoisonNick('');
-                await update(gameRef(roomCode),{poisonNick:null});
-              }}>✕</button>}
-            </div>
-          </div>
-
-          {/* الجولات الخاصة */}
-          <div style={{marginBottom:12}}>
-            <div style={{fontSize:12,color:'var(--gold)',fontWeight:700,marginBottom:6}}>⚡ نوع الجولة القادمة</div>
-            <div style={{fontSize:11,color:'var(--muted)',marginBottom:8}}>يُطبق على الجولة التالية فقط</div>
-            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-              {[
-                [1,'🗡️ عادية','bgh'],
-                [2,'⚔️ مزدوجة','bgh'],
-                [3,'⚡ الاندفاع','bgh'],
-              ].map(([n,label,cls])=>(
-                <button key={n} className={`btn ${activeSpecialRound===n?'bg':cls} bsm`} style={{flex:1}}
-                  onClick={async()=>{
-                    setSpecialRound(n);
-                    await update(gameRef(roomCode),{specialRound:n});
-                  }}>
-                  {label}{n>1&&<span style={{fontSize:9,opacity:.7}}> ({n} هجمات)</span>}
-                </button>
-              ))}
-            </div>
-            {activeSpecialRound>1&&<div style={{marginTop:6,fontSize:11,color:'var(--gold)',background:'rgba(240,192,64,.07)',borderRadius:7,padding:'6px 10px'}}>
-              ✨ الجولة القادمة: {activeSpecialRound===2?'⚔️ مزدوجة — هجومان لكل لاعب':'⚡ الاندفاع — ثلاثة هجمات لكل لاعب'}
-            </div>}
-          </div>
-
-          {/* جولة الصمت */}
-          <div style={{borderTop:'1px solid rgba(255,255,255,.06)',paddingTop:10}}>
-            <div style={{fontSize:12,color:'var(--blue)',fontWeight:700,marginBottom:6}}>🤫 جولة الصمت</div>
-            <div style={{fontSize:11,color:'var(--muted)',marginBottom:8}}>النتائج تُخزَّن ولا تُكشف حتى تقرر أنت</div>
-            <div style={{display:'flex',gap:6}}>
-              <button className={`btn ${isSilentActive?'bb':'bgh'} bsm`} style={{flex:1}} onClick={async()=>{
-                const newVal = !isSilentActive;
-                setSilentRound(newVal);
-                await update(gameRef(roomCode), { silentActive: newVal });
-              }}>
-                {isSilentActive?'🤫 الجولة الحالية صامتة — إلغاء؟':'تفعيل جولة الصمت'}
-              </button>
-            </div>
-            {gameState?.silentPending&&(
-              <button className="btn bv bsm mt2" style={{width:'100%'}} onClick={async()=>{
-                const sp=gameState.silentPending;
-                const updates={};
-                // Apply the stored silent round exits
-                sp.silentExits?.forEach(ex=>{
-                  const p=playersList.find(pl=>pl.nick===ex.nick||pl.id===ex.playerId);
-                  if(p){
-                    updates[`rooms/${roomCode}/players/${p.id}/status`]=ex.inactive?'inactive':'eliminated';
-                    updates[`rooms/${roomCode}/players/${p.id}/eliminatedRound`]=ex.roundNum;
-                    if(!ex.inactive) updates[`rooms/${roomCode}/players/${p.id}/eliminatedBy`]=ex.attackers?.join(' + ')||'لاعب';
-                  }
-                });
-                updates[`rooms/${roomCode}/game/silentPending`]=null;
-                updates[`rooms/${roomCode}/game/phase`]='revealing';
-                await update(ref(db),updates);
-                playSound('suspense');
-                notify('🔓 كُشفت نتائج الجولة الصامتة!','gold');
-              }}>🔓 كشف نتائج الجولة الصامتة الآن</button>
-            )}
-          </div>
-        </div>
 
         {/* سجل سري */}
         <div className="card">
