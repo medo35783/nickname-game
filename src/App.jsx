@@ -661,10 +661,9 @@ export default function App() {
       deadline: dl,
       roundOrder: { nicks:allNicks, names:allNames },
       silentActive: false,
-      poisonPenalized: null,
       attacksPerRound: activeSpecialRound, // عدد الهجمات للجولة
     });
-    setSpecialRound(1); await update(gameRef(roomCode),{specialRound:1,poisonNick:null,poisonPenalized:null}); // أعد للعادي
+    setSpecialRound(1); await update(gameRef(roomCode),{specialRound:1,poisonNick:null}); // أعد للعادي
     notify(`🔔 الجولة ${rn} بدأت!`, 'gold');
   };
 
@@ -682,9 +681,9 @@ export default function App() {
 
     const attackerNick = attackerNickOverride || myNickLocal || '(لاعب)';
 
-    // Block if penalized by poison nick — مخزن في game.poisonPenalized
-    const penalized = gameState?.poisonPenalized||[];
-    if(penalized.includes(attackerNick)||penalized.includes(myNickLocal)){
+    // تحقق من عقوبة اللقب المسموم — مخزنة في player.poisonBanUntil
+    const attackerData = playersList.find(p=>p.nick===attackerNick||p.nick2===attackerNick);
+    if(attackerData?.poisonBanUntil && attackerData.poisonBanUntil >= roundNum){
       notify('☠️ أنت ممنوع من الهجوم هذه الجولة — عقوبة اللقب المسموم!','error');
       return;
     }
@@ -719,9 +718,12 @@ export default function App() {
       return;
     }
 
-    // Block double submit in same round
-    // احسب هجمات هذا المهاجم فقط من Firebase المحدّث
-    const myAttacksCount = Object.values(attacks||{}).filter(a=>a.attackerNick===attackerNick).length;
+    // احسب هجمات هذا اللاعب (بكل ألقابه) — قراءة مباشرة من Firebase
+    const freshSnap = await get(attacksRef(roomCode));
+    const freshAttacks = freshSnap.val() || {};
+    const attackerPlayerObj = playersList.find(p=>p.nick===attackerNick||p.nick2===attackerNick);
+    const attackerNicks = attackerPlayerObj ? [attackerPlayerObj.nick, attackerPlayerObj.nick2].filter(Boolean) : [attackerNick];
+    const myAttacksCount = Object.values(freshAttacks).filter(a=>attackerNicks.includes(a.attackerNick)).length;
     if(myAttacksCount >= attacksPerRound){
       notify(`❌ وصلت للحد الأقصى — ${attacksPerRound} هجمة لكل لاعب في هذه الجولة`,'error');
       return;
@@ -1372,7 +1374,7 @@ export default function App() {
                 await set(ref(db,`rooms/${roomCode}/currentRound`),{attacks:{}});
                 await update(ref(db),updates);
                 await launchRound(roundNum+1);
-                notify('🤫 جولة الصمت — انتقلنا للجولة التالية','info');
+                notify(`🤫 الجولة ${roundNum} مخفية — سيُكشف نتائجها مع الجولة ${roundNum+1}`,'info');
               }}>⏭️ الجولة التالية</button>}
             </div>
             {gameState?.silentPending&&<button className="btn bv bsm mt2" style={{width:'100%'}} onClick={async()=>{
