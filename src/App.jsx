@@ -271,6 +271,7 @@ const gameRef  = code => ref(db, `rooms/${code}/game`);
 export default function App() {
   /* ── NAV ── */
   const [tab, setTab]           = useState('game');
+  const [selectedGame, setSelectedGame] = useState(null); // null=الرئيسية، 'nicknames'، 'qumairi'
   const [gameScreen, setGameScreen] = useState('home');
   const [showTutorial, setShowTutorial] = useState(false);
   const [isLoading, setIsLoading]   = useState(true);  // splash screen on startup
@@ -1004,26 +1005,116 @@ export default function App() {
   const renderGame = () => {
 
     /* ── HOME ── */
-    if(gameScreen==='home') return(
-      <div className="scr">
-        <div style={{textAlign:'center',padding:'20px 0 10px'}}>
-          <div style={{fontSize:56,marginBottom:6}}>🎭</div>
-          <div className="ptitle" style={{fontSize:26}}>لعبة الألقاب</div>
-          <div className="psub">أخفِ هويتك • الكل يهاجم معاً • اكشف الهويات</div>
+    if(gameScreen==='home'){
+      // لو لعبة مختارة → ادخل عليها
+      if(selectedGame==='nicknames') return(
+        <div className="scr">
+          <button className="btn bgh bsm" style={{width:'auto',marginBottom:12}} onClick={()=>setSelectedGame(null)}>← ساحة الألعاب</button>
+          <div style={{textAlign:'center',padding:'10px 0 12px'}}>
+            <div style={{fontSize:46,marginBottom:6}}>🎭</div>
+            <div className="ptitle" style={{fontSize:22}}>لعبة الألقاب</div>
+            <div className="psub">أخفِ هويتك • الكل يهاجم معاً • اكشف الهويات</div>
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            <button className="btn bg" onClick={createRoom}>👑 إنشاء غرفة كمسؤول</button>
+            <button className="btn bo" onClick={()=>setGameScreen('join')}>🎮 انضمام كلاعب برمز الغرفة</button>
+          </div>
+          <button className="btn bgh" style={{marginTop:4}} onClick={()=>setModal({type:'guide'})}>
+            📖 كيف تلعب؟ — دليل للمشرف والمتسابق
+          </button>
+          <div className="div">قوانين اللعبة</div>
+          {['🎭 اختر لقباً لا يمت بصلة لاهتماماتك','⚔️ الكل يهاجم في نفس الوقت — سرية تامة','🔓 النتائج تنكشف للجميع في لحظة واحدة','⏰ الوقت يحدده المشرف ويمكن تمديده','❌ جولتان بلا هجوم = خروج صامت بلا كشف لقبك','🚫 التعاون ممنوع — عقوبته الإخراج الفوري','👁️ الألقاب لا تُكشف كاملةً إلا في نهاية المسابقة'].map((r,i)=>(
+            <div key={i} style={{padding:'7px 11px',marginBottom:4,background:'#0f0f22',borderRadius:8,fontSize:12,color:'var(--muted)',border:'1px solid rgba(255,255,255,.04)'}}>{r}</div>
+          ))}
         </div>
-        <div style={{display:'flex',flexDirection:'column',gap:8}}>
-          <button className="btn bg" onClick={createRoom}>👑 إنشاء غرفة كمسؤول</button>
-          <button className="btn bo" onClick={()=>setGameScreen('join')}>🎮 انضمام كلاعب برمز الغرفة</button>
+      );
+
+      if(selectedGame==='qumairi') return(
+        <div className="scr">
+          <button className="btn bgh bsm" style={{width:'auto',marginBottom:12}} onClick={()=>setSelectedGame(null)}>← ساحة الألعاب</button>
+          <div style={{textAlign:'center',padding:'10px 0 12px'}}>
+            <div style={{fontSize:46,marginBottom:6}}>🦅</div>
+            <div className="ptitle" style={{fontSize:22}}>صيد القميري</div>
+            <div className="psub">وزّع قمائرك • هاجم الأشجار • احمِ مجموعتك</div>
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            <button className="btn bg" onClick={()=>setGameScreen('qumairi_admin')}>👑 إنشاء غرفة كمسؤول</button>
+            <button className="btn bo" onClick={()=>setGameScreen('qumairi_join')}>🎮 انضمام كمجموعة برمز الغرفة</button>
+          </div>
+          <div className="div">نظرة سريعة</div>
+          {['🦅 100 قميري لكل مجموعة توزّع على 11 شجرة','⚔️ ثلاثة أسلحة: شوزل، أم صتمة، نبيطة','🌳 اهجم أشجار الخصوم واصطد قمائرهم','🏆 أكثر مجموعة بقي لها قمائر تفوز','🔒 لا أحد يعرف توزيع مجموعتك السري'].map((r,i)=>(
+            <div key={i} style={{padding:'7px 11px',marginBottom:4,background:'#0f0f22',borderRadius:8,fontSize:12,color:'var(--muted)',border:'1px solid rgba(255,255,255,.04)'}}>{r}</div>
+          ))}
+          <div style={{marginTop:12,padding:14,background:'rgba(240,192,64,.06)',border:'1px solid rgba(240,192,64,.2)',borderRadius:12,textAlign:'center'}}>
+            <div style={{fontSize:13,fontWeight:700,color:'var(--gold)',marginBottom:4}}>🚀 قريباً...</div>
+            <div style={{fontSize:12,color:'var(--muted)'}}>اللعبة قيد البناء — ستكون جاهزة قريباً</div>
+          </div>
         </div>
-        <button className="btn bgh" style={{marginTop:4}} onClick={()=>setModal({type:'guide'})}>
-          📖 كيف تلعب؟ — دليل للمشرف والمتسابق
-        </button>
-        <div className="div">قوانين اللعبة</div>
-        {['🎭 اختر لقباً لا يمت بصلة لاهتماماتك','⚔️ الكل يهاجم في نفس الوقت — سرية تامة','🔓 النتائج تنكشف للجميع في لحظة واحدة','⏰ الوقت يحدده المشرف ويمكن تمديده','❌ جولتان بلا هجوم = خروج صامت بلا كشف لقبك','🚫 التعاون ممنوع — عقوبته الإخراج الفوري','👁️ الألقاب لا تُكشف كاملةً إلا في نهاية المسابقة'].map((r,i)=>(
-          <div key={i} style={{padding:'7px 11px',marginBottom:4,background:'#0f0f22',borderRadius:8,fontSize:12,color:'var(--muted)',border:'1px solid rgba(255,255,255,.04)'}}>{r}</div>
-        ))}
-      </div>
-    );
+      );
+
+      // الشاشة الرئيسية — ساحة الألعاب
+      return(
+        <div className="scr">
+          <div style={{textAlign:'center',padding:'18px 0 14px'}}>
+            <div style={{fontSize:42,marginBottom:6}}>🏟️</div>
+            <div className="ptitle" style={{fontSize:24}}>ساحة الألعاب</div>
+            <div className="psub">العاب جماعية تفاعلية للرحلات والدواوين</div>
+          </div>
+
+          {/* بطاقة لعبة الألقاب */}
+          <div onClick={()=>setSelectedGame('nicknames')} style={{background:'linear-gradient(135deg,rgba(240,192,64,.12),rgba(255,140,0,.06))',border:'2px solid rgba(240,192,64,.3)',borderRadius:16,padding:'18px 16px',marginBottom:12,cursor:'pointer',transition:'all .2s'}}
+            onTouchStart={e=>e.currentTarget.style.transform='scale(.98)'}
+            onTouchEnd={e=>e.currentTarget.style.transform='scale(1)'}>
+            <div style={{display:'flex',alignItems:'center',gap:14}}>
+              <div style={{fontSize:44}}>🎭</div>
+              <div style={{flex:1}}>
+                <div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:'var(--gold)'}}>لعبة الألقاب</div>
+                <div style={{fontSize:12,color:'var(--muted)',marginTop:3,lineHeight:1.6}}>أخفِ هويتك واكشف الآخرين قبل أن يكشفوك</div>
+                <div style={{display:'flex',gap:5,marginTop:8,flexWrap:'wrap'}}>
+                  {['6-50 لاعب','متعدد الجولات','إثارة وتشويق'].map(t=>(
+                    <span key={t} className="tag tg" style={{fontSize:10}}>{t}</span>
+                  ))}
+                </div>
+              </div>
+              <div style={{fontSize:20,color:'var(--gold)'}}>←</div>
+            </div>
+          </div>
+
+          {/* بطاقة لعبة القميري */}
+          <div onClick={()=>setSelectedGame('qumairi')} style={{background:'linear-gradient(135deg,rgba(46,204,113,.1),rgba(26,138,80,.05))',border:'2px solid rgba(46,204,113,.25)',borderRadius:16,padding:'18px 16px',marginBottom:12,cursor:'pointer',transition:'all .2s'}}
+            onTouchStart={e=>e.currentTarget.style.transform='scale(.98)'}
+            onTouchEnd={e=>e.currentTarget.style.transform='scale(1)'}>
+            <div style={{display:'flex',alignItems:'center',gap:14}}>
+              <div style={{fontSize:44}}>🦅</div>
+              <div style={{flex:1}}>
+                <div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:'var(--green)'}}>صيد القميري</div>
+                <div style={{fontSize:12,color:'var(--muted)',marginTop:3,lineHeight:1.6}}>وزّع قمائرك على الأشجار واهجم مجموعات الخصوم</div>
+                <div style={{display:'flex',gap:5,marginTop:8,flexWrap:'wrap'}}>
+                  {['2-6 مجموعات','100 قميري','استراتيجية'].map(t=>(
+                    <span key={t} className="tag tv" style={{fontSize:10}}>{t}</span>
+                  ))}
+                </div>
+              </div>
+              <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}>
+                <span style={{background:'var(--gold)',color:'#07070f',fontSize:9,fontWeight:900,padding:'2px 7px',borderRadius:10}}>قريباً</span>
+                <div style={{fontSize:20,color:'var(--green)'}}>←</div>
+              </div>
+            </div>
+          </div>
+
+          {/* قريباً — ألعاب أخرى */}
+          <div style={{background:'rgba(255,255,255,.03)',border:'1px dashed rgba(255,255,255,.1)',borderRadius:16,padding:'16px',marginBottom:12,textAlign:'center'}}>
+            <div style={{fontSize:28,marginBottom:6}}>🔒</div>
+            <div style={{fontSize:13,fontWeight:700,color:'var(--muted)'}}>ألعاب جديدة قريباً...</div>
+            <div style={{fontSize:11,color:'var(--dim)',marginTop:3}}>نعمل على إضافة المزيد من الألعاب الجماعية</div>
+          </div>
+
+          <button className="btn bgh" style={{marginTop:4,fontSize:12}} onClick={()=>window.open(`mailto:${SUPPORT_EMAIL}?subject=اقتراح لعبة جديدة`)}>
+            💡 اقترح لعبة جديدة
+          </button>
+        </div>
+      );
+    }
 
 
     /* ── WAITING (player joined, waiting for admin to start) ── */
@@ -2633,9 +2724,9 @@ export default function App() {
 
       <div className="hdr">
         {/* Right side — back/exit button when in a room */}
-        {tab==='game'&&roomCode?(
+        {tab==='game'&&(roomCode||selectedGame)?(
           <button className="btn bgh bsm" style={{width:'auto',padding:'6px 12px',fontSize:12,color:'var(--muted)',border:'1px solid rgba(255,255,255,.1)'}}
-            onClick={()=>setModal({type:'exit_game'})}>
+            onClick={()=>{if(roomCode)setModal({type:'exit_game'});else setSelectedGame(null);}}>
             ← رجوع
           </button>
         ):(
@@ -2644,7 +2735,7 @@ export default function App() {
 
         {/* Center logo */}
         <div className="logo" style={{position:'absolute',left:'50%',transform:'translateX(-50%)'}}>
-          {tab==='news'?'🔔 أخبار':tab==='game'?'🎭 لعبة الألقاب':tab==='suggest'?'💡 اقتراح':'💎 الباقات'}
+          {tab==='news'?'🔔 أخبار':tab==='game'?(selectedGame==='nicknames'?'🎭 لعبة الألقاب':selectedGame==='qumairi'?'🦅 صيد القميري':'🏟️ ساحة الألعاب'):tab==='suggest'?'💡 اقتراح':'💎 الباقات'}
         </div>
 
         {/* Left side — admin control button */}
