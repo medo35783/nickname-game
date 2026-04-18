@@ -655,15 +655,26 @@ export default function App() {
     const allNames = shuffle(playersList.map(p=>p.id));
     // clear previous attacks
     await set(ref(db, `rooms/${roomCode}/currentRound`), { attacks:{} });
+    // امسح عقوبات اللقب المسموم المنتهية (الجولة السابقة)
+    const banCleanup = {};
+    playersList.forEach(p=>{
+      if(p.isBannedNextRound && p.isBannedNextRound < rn){
+        banCleanup[`rooms/${roomCode}/players/${p.id}/isBannedNextRound`] = null;
+      }
+    });
+    if(Object.keys(banCleanup).length>0) await update(ref(db), banCleanup);
+
     await update(gameRef(roomCode), {
       phase:'attacking',
       roundNum: rn,
       deadline: dl,
       roundOrder: { nicks:allNicks, names:allNames },
       silentActive: false,
-      attacksPerRound: activeSpecialRound, // عدد الهجمات للجولة
+      attacksPerRound: activeSpecialRound,
     });
-    setSpecialRound(1); await update(gameRef(roomCode),{specialRound:1,poisonNick:null}); // أعد للعادي
+    setSpecialRound(1);
+    // امسح خيارات الجولة السابقة
+    await update(gameRef(roomCode),{specialRound:1,poisonNick:null});
     notify(`🔔 الجولة ${rn} بدأت!`, 'gold');
   };
 
@@ -681,10 +692,10 @@ export default function App() {
 
     const attackerNick = attackerNickOverride || myNickLocal || '(لاعب)';
 
-    // تحقق من عقوبة اللقب المسموم — مخزنة في player.poisonBanUntil
+    // تحقق من عقوبة اللقب المسموم — isBannedNextRound يحتوي على رقم الجولة الممنوع فيها
     const attackerData = playersList.find(p=>p.nick===attackerNick||p.nick2===attackerNick);
-    if(attackerData?.poisonBanUntil && attackerData.poisonBanUntil >= roundNum){
-      notify('☠️ أنت ممنوع من الهجوم هذه الجولة — عقوبة اللقب المسموم!','error');
+    if(attackerData?.isBannedNextRound === roundNum){
+      notify('☠️ أنت ممنوع من الهجوم هذه الجولة — عقوبة اللقب المسموم من الجولة الماضية!','error');
       return;
     }
 
@@ -718,12 +729,17 @@ export default function App() {
       return;
     }
 
-    // احسب هجمات هذا اللاعب (بكل ألقابه) — قراءة مباشرة من Firebase
+    // احسب هجمات هذا اللاعب — قراءة مباشرة من Firebase بـ ID اللاعب
     const freshSnap = await get(attacksRef(roomCode));
     const freshAttacks = freshSnap.val() || {};
     const attackerPlayerObj = playersList.find(p=>p.nick===attackerNick||p.nick2===attackerNick);
-    const attackerNicks = attackerPlayerObj ? [attackerPlayerObj.nick, attackerPlayerObj.nick2].filter(Boolean) : [attackerNick];
-    const myAttacksCount = Object.values(freshAttacks).filter(a=>attackerNicks.includes(a.attackerNick)).length;
+    const attackerPlayerId = attackerPlayerObj?.id;
+    const myAttacksCount = Object.values(freshAttacks).filter(a=>{
+      // الفحص الأساسي بالـ ID، مع fallback للـ nick للتوافق مع الهجمات القديمة
+      if(a.attackerPlayerId && attackerPlayerId) return a.attackerPlayerId===attackerPlayerId;
+      const nicks = attackerPlayerObj ? [attackerPlayerObj.nick, attackerPlayerObj.nick2].filter(Boolean) : [attackerNick];
+      return nicks.includes(a.attackerNick);
+    }).length;
     if(myAttacksCount >= attacksPerRound){
       notify(`❌ وصلت للحد الأقصى — ${attacksPerRound} هجمة لكل لاعب في هذه الجولة`,'error');
       return;
@@ -732,10 +748,13 @@ export default function App() {
     const guessedPlayer = playersList.find(p=>p.id===myGuess);
     const correct = guessedPlayer?.id === realOwner.id;
 
+    // احفظ attackerPlayerId ليكون الفحص دقيقاً (لاعب واحد = هوية واحدة حتى لو عنده لقبان)
+    const actualAttackerId = attackerPlayerObj?.id || myId || null;
     const newAttackRef = push(attacksRef(roomCode));
     await set(newAttackRef, {
       attackerNick,
       attackerId: myId || attackerNickOverride,
+      attackerPlayerId: actualAttackerId, // ID اللاعب — للعد الدقيق
       targetNick: myNick,
       guessedId: myGuess,
       guessedName: guessedPlayer?.name,
@@ -773,13 +792,20 @@ export default function App() {
   const processReveal = async (currentAttacks) => {
     playSound('suspense');
 
+    // ══ اللقب المسموم — عقوبة في الجولة القادمة ══
     if(activePoisonNick) {
-      const poisonAttacks = currentAttacks.filter(a=>a.targetNick===activePoisonNick&&!a.correct);
-      if(poisonAttacks.length>0) {
-        setTimeout(()=>{ playSound('poison_hit'); notify(`☠️ ${poisonAttacks.length} لاعب أصاب اللقب المسموم — ممنوعون من الجولة القادمة!`,'info'); },600);
-        // احفظ المعاقبين في Firebase
-        const penalized = poisonAttacks.map(a=>a.attackerNick);
-        await update(gameRef(roomCode),{poisonPenalized:penalized});
+      const poisonMisses = currentAttacks.filter(a=>a.targetNick===activePoisonNick && !a.correct);
+      if(poisonMisses.length>0) {
+        setTimeout(()=>{ playSound('poison_hit'); notify(`☠️ ${poisonMisses.length} لاعب وقع في فخ اللقب المسموم — ممنوع من الجولة القادمة!`,'info'); },600);
+        // احفظ العقوبة مباشرة في بيانات كل لاعب معاقب
+        const banUpdates = {};
+        const nextRound = (gameState?.roundNum||0) + 1;
+        poisonMisses.forEach(atk=>{
+          // احصل على ID اللاعب من الهجمة
+          const pid = atk.attackerPlayerId || playersList.find(p=>p.nick===atk.attackerNick||p.nick2===atk.attackerNick)?.id;
+          if(pid) banUpdates[`rooms/${roomCode}/players/${pid}/isBannedNextRound`] = nextRound;
+        });
+        if(Object.keys(banUpdates).length>0) await update(ref(db), banUpdates);
       }
     }
 
@@ -828,6 +854,34 @@ export default function App() {
     // ══ NORMAL ROUND ══
     const updates = {};
     const exitList = [];
+
+    // ── دمج الجولة الصامتة السابقة إن وُجدت ──
+    const pendingSilent = gameState?.silentPending;
+    if(pendingSilent?.silentExits?.length > 0){
+      pendingSilent.silentExits.forEach(ex=>{
+        const p = playersList.find(pl=>pl.id===ex.playerId);
+        if(p && p.status==='active'){
+          const attackersStr = (ex.attackers||[]).join(' + ');
+          updates[`rooms/${roomCode}/players/${p.id}/status`] = 'eliminated';
+          updates[`rooms/${roomCode}/players/${p.id}/eliminatedBy`] = attackersStr;
+          updates[`rooms/${roomCode}/players/${p.id}/eliminatedRound`] = ex.roundNum;
+          exitList.push({nick:ex.nick, nick2:ex.nick2, name:ex.name, eliminatedBy:attackersStr, attackers:ex.attackers, initials:ex.initials, colorIdx:ex.colorIdx, fromSilentRound:ex.roundNum});
+        }
+      });
+      // حدّث الخامل من الجولة الصامتة
+      pendingSilent.silentMissed?.forEach(m=>{
+        const p = playersList.find(pl=>pl.id===m.playerId);
+        if(p && p.status==='active'){
+          updates[`rooms/${roomCode}/players/${p.id}/missedRounds`] = m.missedRounds;
+          if(m.missedRounds >= 2){
+            updates[`rooms/${roomCode}/players/${p.id}/status`] = 'inactive';
+            updates[`rooms/${roomCode}/players/${p.id}/eliminatedRound`] = pendingSilent.roundNum;
+          }
+        }
+      });
+      // امسح silentPending
+      updates[`rooms/${roomCode}/game/silentPending`] = null;
+    }
 
     for(const p of playersList){
       if(elimIds.has(p.id)){
@@ -1156,7 +1210,13 @@ export default function App() {
           {isSilentActive&&(
             <div style={{background:'rgba(79,163,224,.08)',border:'1px solid rgba(79,163,224,.3)',borderRadius:9,padding:'8px 12px',marginBottom:8,display:'flex',alignItems:'center',gap:8,fontSize:12,color:'var(--blue)'}}>
               <span style={{fontSize:16}}>🤫</span>
-              <span><strong>جولة الصمت</strong> — النتائج لن تُعلن حتى يقرر المشرف</span>
+              <span><strong>جولة الصمت</strong> — النتائج تُخفى حتى الجولة القادمة</span>
+            </div>
+          )}
+          {gameState?.silentPending && !isSilentActive && (
+            <div style={{background:'rgba(155,89,182,.08)',border:'1px solid rgba(155,89,182,.3)',borderRadius:9,padding:'8px 12px',marginBottom:8,display:'flex',alignItems:'center',gap:8,fontSize:12,color:'var(--purple)'}}>
+              <span style={{fontSize:16}}>🎭</span>
+              <span>الجولة السابقة كانت صامتة — ستُكشف نتائجها مع هذه الجولة!</span>
             </div>
           )}
           {activePoisonNick&&(
