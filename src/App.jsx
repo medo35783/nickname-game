@@ -316,6 +316,28 @@ export default function App() {
   const [statsTab, setStatsTab]  = useState('round');
   const [heatmapView, setHeatmapView] = useState('nicks'); // 'nicks' | 'names'
   const [suggForm, setSuggForm]  = useState({cat:'لعبة', text:''});
+
+  /* ── QUMAIRI GAME STATE ── */
+  const [qRoom, setQRoom]         = useState('');      // qumairi room code
+  const [qRole, setQRole]         = useState(null);    // 'admin' | 'group'
+  const [qGroupName, setQGroupName] = useState('');
+  const [qGroupId, setQGroupId]   = useState(null);
+  const [qGameState, setQGameState] = useState(null);
+  const [qGroups, setQGroups]     = useState({});
+  const [qAttacks, setQAttacks]   = useState({});
+  const [qJoinInput, setQJoinInput] = useState('');
+  const [qJoinErr, setQJoinErr]   = useState('');
+  const [qDistribution, setQDistribution] = useState({});  // {treeName: count}
+  const [qDistLocked, setQDistLocked] = useState(false);
+  const [qAttackTarget, setQAttackTarget] = useState({group:'',tree:'',weapon:''});
+
+  const Q_TREES = ['العرعر','سدرة','برسوبس','طلحة','كينة','أثلة','سمر','العوسج','غضاة','رمثة','الغاف'];
+  const Q_WEAPONS = [
+    {id:'showzel',  name:'شوزل',     icon:'🔫', qty:3,  power:30, diff:'صعب'},
+    {id:'omsagma',  name:'أم صتمة',  icon:'🎯', qty:5,  power:20, diff:'متوسط'},
+    {id:'nabeeta',  name:'نبيطة',    icon:'🪃', qty:10, power:10, diff:'سهل'},
+  ];
+  const Q_TOTAL = 100;
   const [guideRole, setGuideRole] = useState('player'); // 'player' | 'admin'
   const [suggestions]            = useState([{id:1,cat:'تصميم',text:'وضع داكن أكثر',date:'2025-03-10'},{id:2,cat:'لعبة',text:'مؤقت صوتي عند النهاية',date:'2025-03-12'}]);
   const [countdown, setCountdown] = useState(null);
@@ -390,6 +412,18 @@ export default function App() {
 
     return ()=>{ off(gRef); off(pRef); off(aRef); off(rRef); };
   }, [roomCode]);
+
+  /* ══ QUMAIRI FIREBASE LISTENERS ══ */
+  useEffect(()=>{
+    if(!qRoom) return;
+    const qgRef = ref(db, `qrooms/${qRoom}/game`);
+    const qpRef = ref(db, `qrooms/${qRoom}/groups`);
+    const qaRef = ref(db, `qrooms/${qRoom}/attacks`);
+    const unsub1 = onValue(qgRef, snap=>setQGameState(snap.val()));
+    const unsub2 = onValue(qpRef, snap=>setQGroups(snap.val()||{}));
+    const unsub3 = onValue(qaRef, snap=>setQAttacks(snap.val()||{}));
+    return ()=>{ off(qgRef); off(qpRef); off(qaRef); };
+  }, [qRoom]);
 
   /* ══ COUNTDOWN ══ */
   useEffect(()=>{
@@ -1042,13 +1076,10 @@ export default function App() {
             <button className="btn bo" onClick={()=>setGameScreen('qumairi_join')}>🎮 انضمام كمجموعة برمز الغرفة</button>
           </div>
           <div className="div">نظرة سريعة</div>
-          {['🦅 100 قميري لكل مجموعة توزّع على 11 شجرة','⚔️ ثلاثة أسلحة: شوزل، أم صتمة، نبيطة','🌳 اهجم أشجار الخصوم واصطد قمائرهم','🏆 أكثر مجموعة بقي لها قمائر تفوز','🔒 لا أحد يعرف توزيع مجموعتك السري'].map((r,i)=>(
+          {['🦅 100 قميري لكل مجموعة توزّع على 11 شجرة','⚔️ ثلاثة أسلحة: شوزل، أم صتمة، نبيطة','🌳 اهجم أشجار الخصوم واصطد القميري حقهم','🏆 أكثر مجموعة بقي لها قميري تفوز','🔒 لا أحد يعرف توزيع مجموعتك السري'].map((r,i)=>(
             <div key={i} style={{padding:'7px 11px',marginBottom:4,background:'#0f0f22',borderRadius:8,fontSize:12,color:'var(--muted)',border:'1px solid rgba(255,255,255,.04)'}}>{r}</div>
           ))}
-          <div style={{marginTop:12,padding:14,background:'rgba(240,192,64,.06)',border:'1px solid rgba(240,192,64,.2)',borderRadius:12,textAlign:'center'}}>
-            <div style={{fontSize:13,fontWeight:700,color:'var(--gold)',marginBottom:4}}>🚀 قريباً...</div>
-            <div style={{fontSize:12,color:'var(--muted)'}}>اللعبة قيد البناء — ستكون جاهزة قريباً</div>
-          </div>
+
         </div>
       );
 
@@ -1058,7 +1089,7 @@ export default function App() {
           <div style={{textAlign:'center',padding:'18px 0 14px'}}>
             <div style={{fontSize:42,marginBottom:6}}>🏟️</div>
             <div className="ptitle" style={{fontSize:24}}>ساحة الألعاب</div>
-            <div className="psub">العاب جماعية تفاعلية للرحلات والدواوين</div>
+            <div className="psub">ألعاب جماعية تفاعلية للرحلات والاجتماعات والمناسبات</div>
           </div>
 
           {/* بطاقة لعبة الألقاب */}
@@ -1088,7 +1119,7 @@ export default function App() {
               <div style={{fontSize:44}}>🦅</div>
               <div style={{flex:1}}>
                 <div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:'var(--green)'}}>صيد القميري</div>
-                <div style={{fontSize:12,color:'var(--muted)',marginTop:3,lineHeight:1.6}}>وزّع قمائرك على الأشجار واهجم مجموعات الخصوم</div>
+                <div style={{fontSize:12,color:'var(--muted)',marginTop:3,lineHeight:1.6}}>وزّع القميري على الأشجار واهجم مجموعات الخصوم</div>
                 <div style={{display:'flex',gap:5,marginTop:8,flexWrap:'wrap'}}>
                   {['2-6 مجموعات','100 قميري','استراتيجية'].map(t=>(
                     <span key={t} className="tag tv" style={{fontSize:10}}>{t}</span>
@@ -1096,17 +1127,16 @@ export default function App() {
                 </div>
               </div>
               <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}>
-                <span style={{background:'var(--gold)',color:'#07070f',fontSize:9,fontWeight:900,padding:'2px 7px',borderRadius:10}}>قريباً</span>
-                <div style={{fontSize:20,color:'var(--green)'}}>←</div>
+<div style={{fontSize:20,color:'var(--green)'}}>←</div>
               </div>
             </div>
           </div>
 
           {/* قريباً — ألعاب أخرى */}
           <div style={{background:'rgba(255,255,255,.03)',border:'1px dashed rgba(255,255,255,.1)',borderRadius:16,padding:'16px',marginBottom:12,textAlign:'center'}}>
-            <div style={{fontSize:28,marginBottom:6}}>🔒</div>
-            <div style={{fontSize:13,fontWeight:700,color:'var(--muted)'}}>ألعاب جديدة قريباً...</div>
-            <div style={{fontSize:11,color:'var(--dim)',marginTop:3}}>نعمل على إضافة المزيد من الألعاب الجماعية</div>
+            <div style={{fontSize:28,marginBottom:6}}>🎲</div>
+            <div style={{fontSize:13,fontWeight:700,color:'var(--muted)'}}>المزيد من الألعاب قادمة!</div>
+            <div style={{fontSize:11,color:'var(--dim)',marginTop:3}}>ترقبوا ألعاب جماعية جديدة ومثيرة</div>
           </div>
 
           <button className="btn bgh" style={{marginTop:4,fontSize:12}} onClick={()=>window.open(`mailto:${SUPPORT_EMAIL}?subject=اقتراح لعبة جديدة`)}>
@@ -2057,6 +2087,476 @@ export default function App() {
       );
     }
 
+    /* ══════════════════════════════════════════════════
+       QUMAIRI SCREENS
+    ══════════════════════════════════════════════════ */
+
+    /* ── QUMAIRI: CREATE ROOM ── */
+    if(gameScreen==='qumairi_admin'){
+      return(
+        <div className="scr">
+          <button className="btn bgh bsm" style={{width:'auto',marginBottom:12}} onClick={()=>{setGameScreen('home');setSelectedGame('qumairi');}}>← رجوع</button>
+          <div className="ptitle">🦅 إنشاء غرفة — صيد القميري</div>
+          <div className="psub">أنت المشرف — أنشئ الغرفة وأرسل الرمز للمجموعات</div>
+          <div className="card">
+            <button className="btn bg" onClick={async()=>{
+              const code=genCode();
+              setQRoom(code);
+              await set(ref(db,`qrooms/${code}`),{
+                game:{phase:'lobby',createdAt:Date.now()},
+                groups:{},
+                attacks:{}
+              });
+              setQRole('admin');
+              setGameScreen('qumairi_lobby');
+              notify(`✅ الغرفة جاهزة: ${code}`,'gold');
+            }}>🏟️ إنشاء غرفة جديدة</button>
+          </div>
+        </div>
+      );
+    }
+
+    /* ── QUMAIRI: JOIN ROOM ── */
+    if(gameScreen==='qumairi_join'){
+      return(
+        <div className="scr">
+          <button className="btn bgh bsm" style={{width:'auto',marginBottom:12}} onClick={()=>{setGameScreen('home');setSelectedGame('qumairi');}}>← رجوع</button>
+          <div className="ptitle">🦅 انضمام — صيد القميري</div>
+          <div className="psub">أدخل رمز الغرفة واسم مجموعتك</div>
+          <div className="card">
+            <div className="ig"><label className="lbl">🔢 رمز الغرفة</label>
+              <input className="inp big" placeholder="× × × × × ×" maxLength={6} value={qJoinInput} onChange={e=>{setQJoinInput(e.target.value.replace(/\D/g,''));setQJoinErr('');}}/>
+            </div>
+            <div className="ig"><label className="lbl">اسم المجموعة</label>
+              <input className="inp" placeholder="الصقور" value={qGroupName} onChange={e=>setQGroupName(e.target.value)}/>
+            </div>
+            {qJoinErr&&<div className="err-msg">⚠️ {qJoinErr}</div>}
+            <button className="btn bg mt2" onClick={async()=>{
+              if(qJoinInput.length!==6){setQJoinErr('الرمز 6 أرقام');return;}
+              if(!qGroupName.trim()){setQJoinErr('أدخل اسم مجموعتك');return;}
+              try{
+                const snap=await get(ref(db,`qrooms/${qJoinInput}`));
+                if(!snap.exists()){setQJoinErr('الغرفة غير موجودة');return;}
+                const data=snap.val();
+                const groups=Object.entries(data.groups||{});
+                if(groups.length>=6){setQJoinErr('الغرفة ممتلئة — 6 مجموعات كحد أقصى');return;}
+                if(groups.some(([,g])=>g.name?.trim()===qGroupName.trim())){setQJoinErr('اسم المجموعة مأخوذ');return;}
+                if(data.game?.phase!=='lobby'){setQJoinErr('اللعبة بدأت — لا يمكن الانضمام');return;}
+                const newRef=push(ref(db,`qrooms/${qJoinInput}/groups`));
+                const initWeapons={};
+                Q_WEAPONS.forEach(w=>{initWeapons[w.id]=w.qty;});
+                await set(newRef,{
+                  name:qGroupName.trim(),
+                  trees:{},
+                  weapons:initWeapons,
+                  totalRemaining:Q_TOTAL,
+                  distributed:false,
+                  joinedAt:Date.now()
+                });
+                setQGroupId(newRef.key);
+                setQRoom(qJoinInput);
+                setQRole('group');
+                setGameScreen('qumairi_lobby');
+                notify('✅ انضممت للغرفة!','success');
+              }catch(e){setQJoinErr('خطأ — تحقق من الاتصال');}
+            }}>🚀 انضمام</button>
+          </div>
+        </div>
+      );
+    }
+
+    /* ── QUMAIRI: LOBBY ── */
+    if(gameScreen==='qumairi_lobby'){
+      const gList=Object.entries(qGroups).map(([id,g])=>({...g,id}));
+      const allDistributed=gList.length>=2&&gList.every(g=>g.distributed);
+      const qPhase=qGameState?.phase||'lobby';
+
+      // auto-navigate
+      if(qPhase==='distributing'&&qRole==='group'&&!qDistLocked) { /* stay */ }
+      else if(qPhase==='distributing'&&qRole==='group'&&qDistLocked) { /* wait */ }
+      else if(qPhase==='playing') { setTimeout(()=>setGameScreen('qumairi_play'),100); }
+
+      return(
+        <div className="scr">
+          <button className="btn bgh bsm" style={{width:'auto',marginBottom:12}} onClick={()=>{setGameScreen('home');setSelectedGame('qumairi');}}>← رجوع</button>
+          <div className="ptitle">🦅 صيد القميري</div>
+          <div className="card" style={{textAlign:'center'}}>
+            <div style={{fontSize:13,color:'var(--muted)',marginBottom:6}}>رمز الغرفة</div>
+            <div className="room-code-big">{qRoom}</div>
+            <button className="btn bo bsm" style={{width:'auto',margin:'8px auto 0'}} onClick={()=>{navigator.clipboard?.writeText(qRoom);notify('تم النسخ','success');}}>📋 نسخ</button>
+          </div>
+
+          <div className="card">
+            <div className="ctitle">👥 المجموعات ({gList.length}/6)</div>
+            {gList.length===0&&<div style={{textAlign:'center',color:'var(--muted)',fontSize:12,padding:12}}>في انتظار المجموعات...</div>}
+            {gList.map((g,i)=>(
+              <div key={g.id} className="pi" style={{marginBottom:5}}>
+                <div style={{width:32,height:32,borderRadius:'50%',background:AV_COLORS[i%AV_COLORS.length],display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:900,color:'#07070f'}}>{g.name?.[0]}</div>
+                <div className="pi-info">
+                  <div className="pi-name">{g.name}</div>
+                  <div className="pi-sub">{g.distributed?'✅ وزّع القميري':'⏳ لم يوزّع بعد'}</div>
+                </div>
+                {qRole==='admin'&&<button className="btn br bxs" onClick={async()=>{
+                  await set(ref(db,`qrooms/${qRoom}/groups/${g.id}`),null);
+                  notify(`حُذفت ${g.name}`,'info');
+                }}>✕</button>}
+              </div>
+            ))}
+          </div>
+
+          {/* المشرف: بدء التوزيع */}
+          {qRole==='admin'&&qPhase==='lobby'&&<>
+            <button className="btn bg" disabled={gList.length<2} onClick={async()=>{
+              await update(ref(db,`qrooms/${qRoom}/game`),{phase:'distributing'});
+              notify('🌳 مرحلة التوزيع بدأت!','gold');
+            }}>🌳 بدء مرحلة التوزيع ({gList.length}/2+)</button>
+          </>}
+
+          {/* المشرف: بدء اللعبة بعد اكتمال التوزيع */}
+          {qRole==='admin'&&qPhase==='distributing'&&<>
+            {allDistributed
+              ?<button className="btn bg" onClick={async()=>{
+                await update(ref(db,`qrooms/${qRoom}/game`),{phase:'playing',round:1,currentAttack:null,timer:null});
+                notify('⚔️ اللعبة بدأت!','gold');
+              }}>⚔️ بدء اللعبة — الكل وزّع!</button>
+              :<div style={{textAlign:'center',color:'var(--muted)',fontSize:12,padding:10}}>⏳ في انتظار جميع المجموعات لتوزيع القميري</div>
+            }
+          </>}
+
+          {/* اللاعب: شاشة التوزيع */}
+          {qRole==='group'&&qPhase==='distributing'&&!qDistLocked&&(()=>{
+            const total=Object.values(qDistribution).reduce((s,v)=>s+(parseInt(v)||0),0);
+            const remaining=Q_TOTAL-total;
+            return(
+              <div className="card">
+                <div className="ctitle">🌳 وزّع {Q_TOTAL} قميري على الأشجار</div>
+                <div style={{textAlign:'center',marginBottom:10}}>
+                  <div style={{fontFamily:'Cairo',fontSize:28,fontWeight:900,color:remaining===0?'var(--green)':remaining<0?'var(--red)':'var(--gold)'}}>{remaining}</div>
+                  <div style={{fontSize:11,color:'var(--muted)'}}>متبقي للتوزيع</div>
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                  {Q_TREES.map(tree=>(
+                    <div key={tree} style={{display:'flex',alignItems:'center',gap:8}}>
+                      <span style={{fontSize:12,fontWeight:700,color:'var(--text)',width:70,textAlign:'right'}}>{tree}</span>
+                      <span style={{fontSize:14}}>🌳</span>
+                      <input type="number" min="0" max="100" className="inp" style={{flex:1,padding:'7px 10px',fontSize:14,textAlign:'center'}}
+                        value={qDistribution[tree]||''} placeholder="0"
+                        onChange={e=>setQDistribution(prev=>({...prev,[tree]:e.target.value}))}/>
+                      <span style={{fontSize:11,color:'var(--muted)',width:30}}>{qDistribution[tree]||0}</span>
+                    </div>
+                  ))}
+                </div>
+                <button className="btn bg mt3" disabled={remaining!==0} onClick={async()=>{
+                  const trees={};
+                  Q_TREES.forEach(t=>{trees[t]=parseInt(qDistribution[t])||0;});
+                  await update(ref(db,`qrooms/${qRoom}/groups/${qGroupId}`),{
+                    trees,
+                    distributed:true,
+                    totalRemaining:Q_TOTAL
+                  });
+                  setQDistLocked(true);
+                  notify('✅ تم توزيع القميري — في انتظار الباقين','success');
+                }}>
+                  {remaining===0?'✅ تأكيد التوزيع':`⚠️ وزّع ${remaining} قميري المتبقية`}
+                </button>
+              </div>
+            );
+          })()}
+
+          {qRole==='group'&&qDistLocked&&qPhase==='distributing'&&(
+            <div className="card" style={{textAlign:'center',padding:20}}>
+              <div style={{fontSize:48,marginBottom:8}}>✅</div>
+              <div style={{fontFamily:'Cairo',fontSize:16,fontWeight:900,color:'var(--green)'}}>تم توزيع القميري!</div>
+              <div style={{fontSize:12,color:'var(--muted)',marginTop:6}}>في انتظار باقي المجموعات والمشرف لبدء اللعبة</div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    /* ── QUMAIRI: PLAY (main game) ── */
+    if(gameScreen==='qumairi_play'){
+      const gList=Object.entries(qGroups).map(([id,g])=>({...g,id}));
+      const myGroup=gList.find(g=>g.id===qGroupId);
+      const otherGroups=gList.filter(g=>g.id!==qGroupId);
+      const qPhase=qGameState?.phase||'playing';
+      const currentAttack=qGameState?.currentAttack;
+      const timer=qGameState?.timer;
+
+      if(qPhase==='ended') setTimeout(()=>setGameScreen('qumairi_results'),100);
+
+      // المشرف
+      if(qRole==='admin'){
+        return(
+          <div className="scr">
+            <div className="ptitle">🦅 لوحة المشرف</div>
+            <div className="psub">الجولة {qGameState?.round||1}</div>
+
+            {/* إحصاءات سريعة */}
+            <div className="sg" style={{gridTemplateColumns:`repeat(${gList.length},1fr)`,marginBottom:10}}>
+              {gList.map((g,i)=>(
+                <div key={g.id} className="sbox">
+                  <div className="snum" style={{fontSize:16,color:AV_COLORS[i%AV_COLORS.length].includes('gold')?'var(--gold)':'var(--text)'}}>{g.totalRemaining||0}</div>
+                  <div className="slbl" style={{fontSize:9}}>{g.name}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* الهجوم الحالي */}
+            {currentAttack&&(
+              <div className="card" style={{background:'rgba(230,57,80,.08)',border:'1px solid rgba(230,57,80,.3)'}}>
+                <div className="ctitle" style={{color:'var(--red)'}}>⚔️ هجوم جارٍ</div>
+                <div style={{fontSize:13,marginBottom:8}}>
+                  <strong style={{color:'var(--gold)'}}>{currentAttack.attackerName}</strong> يهاجم
+                  <strong style={{color:'var(--red)'}}> {currentAttack.targetName}</strong> —
+                  شجرة <strong style={{color:'var(--green)'}}>{currentAttack.tree}</strong> بـ
+                  <strong>{currentAttack.weaponName}</strong>
+                </div>
+
+                {/* Timer controls */}
+                {!timer&&<>
+                  <div style={{fontSize:11,color:'var(--muted)',marginBottom:6}}>اختر وقت السؤال:</div>
+                  <div style={{display:'flex',gap:5,marginBottom:8,flexWrap:'wrap'}}>
+                    {[15,30,45,60].map(s=>(
+                      <button key={s} className="btn bg bsm" style={{flex:1}} onClick={async()=>{
+                        await update(ref(db,`qrooms/${qRoom}/game`),{timer:{deadline:Date.now()+s*1000,duration:s}});
+                      }}>{s}ث</button>
+                    ))}
+                  </div>
+                </>}
+
+                {/* After timer — judge */}
+                {timer&&<>
+                  <div className="tbar urg" style={{marginBottom:8}}>
+                    <div style={{fontSize:18}}>⏱️</div>
+                    <div style={{flex:1}}><div className="tval">{timer.deadline>Date.now()?fmtMs(timer.deadline-Date.now()):'انتهى!'}</div></div>
+                  </div>
+                  {timer.deadline<=Date.now()&&<div style={{display:'flex',gap:8}}>
+                    <button className="btn bv" style={{flex:1}} onClick={async()=>{
+                      // إجابة صحيحة — الهجوم ينجح
+                      const atk=currentAttack;
+                      const targetGroup=gList.find(g=>g.id===atk.targetId);
+                      const treeCount=targetGroup?.trees?.[atk.tree]||0;
+                      const weaponPower=Q_WEAPONS.find(w=>w.id===atk.weapon)?.power||0;
+                      const hunted=Math.min(treeCount,weaponPower);
+                      const newTreeCount=treeCount-hunted;
+                      const updates={};
+                      updates[`qrooms/${qRoom}/groups/${atk.targetId}/trees/${atk.tree}`]=newTreeCount;
+                      updates[`qrooms/${qRoom}/groups/${atk.targetId}/totalRemaining`]=(targetGroup?.totalRemaining||0)-hunted;
+                      updates[`qrooms/${qRoom}/groups/${atk.attackerId}/weapons/${atk.weapon}`]=(qGroups[atk.attackerId]?.weapons?.[atk.weapon]||1)-1;
+                      // سجل الهجوم
+                      const atkLog={...atk,result:'success',hunted,timestamp:Date.now()};
+                      const logRef=push(ref(db,`qrooms/${qRoom}/attacks`));
+                      updates[`qrooms/${qRoom}/attacks/${logRef.key}`]=atkLog;
+                      updates[`qrooms/${qRoom}/game/currentAttack`]=null;
+                      updates[`qrooms/${qRoom}/game/timer`]=null;
+                      updates[`qrooms/${qRoom}/game/lastResult`]={...atkLog,msg:hunted>0?`🎯 ${hunted} قميري تم اصطيادها!`:'🌳 الشجرة فارغة!'};
+                      await update(ref(db),updates);
+                      notify(hunted>0?`🎯 ${hunted} قميري!`:'الشجرة فارغة!','gold');
+                    }}>✅ إجابة صحيحة</button>
+                    <button className="btn br" style={{flex:1}} onClick={async()=>{
+                      // إجابة خاطئة — السلاح يُفقد فقط
+                      const atk=currentAttack;
+                      const updates={};
+                      updates[`qrooms/${qRoom}/groups/${atk.attackerId}/weapons/${atk.weapon}`]=(qGroups[atk.attackerId]?.weapons?.[atk.weapon]||1)-1;
+                      const atkLog={...atk,result:'fail',hunted:0,timestamp:Date.now()};
+                      const logRef=push(ref(db,`qrooms/${qRoom}/attacks`));
+                      updates[`qrooms/${qRoom}/attacks/${logRef.key}`]=atkLog;
+                      updates[`qrooms/${qRoom}/game/currentAttack`]=null;
+                      updates[`qrooms/${qRoom}/game/timer`]=null;
+                      updates[`qrooms/${qRoom}/game/lastResult`]={...atkLog,msg:'❌ إجابة خاطئة — السلاح ضاع!'};
+                      await update(ref(db),updates);
+                      notify('❌ إجابة خاطئة','error');
+                    }}>❌ إجابة خاطئة</button>
+                  </div>}
+                </>}
+              </div>
+            )}
+
+            {/* آخر نتيجة */}
+            {qGameState?.lastResult&&!currentAttack&&(
+              <div className="ann ag" style={{marginBottom:10}}>
+                <div style={{fontSize:13,fontWeight:700}}>{qGameState.lastResult.msg}</div>
+                <div style={{fontSize:11,color:'var(--muted)',marginTop:4}}>
+                  {qGameState.lastResult.attackerName} ← {qGameState.lastResult.targetName} / {qGameState.lastResult.tree}
+                </div>
+              </div>
+            )}
+
+            {/* تفاصيل المجموعات — للمشرف فقط */}
+            <div className="card">
+              <div className="ctitle">📊 تفاصيل المجموعات (سري)</div>
+              {gList.map((g,i)=>(
+                <div key={g.id} style={{marginBottom:12,padding:10,background:'#09091e',borderRadius:9,border:'1px solid rgba(255,255,255,.05)'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+                    <span style={{fontWeight:700,color:'var(--gold)'}}>{g.name}</span>
+                    <span style={{fontWeight:900,color:'var(--green)'}}>{g.totalRemaining} قميري</span>
+                  </div>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:6}}>
+                    {Q_TREES.map(t=>(
+                      <span key={t} style={{fontSize:10,padding:'2px 6px',borderRadius:6,background:g.trees?.[t]>0?'rgba(46,204,113,.1)':'rgba(255,255,255,.03)',color:g.trees?.[t]>0?'var(--green)':'var(--dim)'}}>
+                        {t}: {g.trees?.[t]||0}
+                      </span>
+                    ))}
+                  </div>
+                  <div style={{display:'flex',gap:6}}>
+                    {Q_WEAPONS.map(w=>(
+                      <span key={w.id} style={{fontSize:10,color:g.weapons?.[w.id]>0?'var(--text)':'var(--dim)'}}>
+                        {w.icon}{g.weapons?.[w.id]||0}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* إنهاء اللعبة */}
+            <button className="btn br mt2" onClick={async()=>{
+              await update(ref(db,`qrooms/${qRoom}/game`),{phase:'ended'});
+              notify('🏆 انتهت اللعبة!','gold');
+            }}>🏆 إنهاء اللعبة وإعلان النتائج</button>
+          </div>
+        );
+      }
+
+      // اللاعب (المجموعة)
+      return(
+        <div className="scr">
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+            <div className="ptitle" style={{fontSize:16,margin:0}}>🦅 {myGroup?.name||qGroupName}</div>
+            <div style={{fontFamily:'Cairo',fontSize:20,fontWeight:900,color:'var(--green)'}}>{myGroup?.totalRemaining||0} 🐦</div>
+          </div>
+
+          {/* الهجوم الحالي — للجميع */}
+          {currentAttack&&(
+            <div className="card" style={{background:'rgba(230,57,80,.06)',border:'1px solid rgba(230,57,80,.2)'}}>
+              <div style={{fontSize:13,fontWeight:700,color:'var(--red)',marginBottom:4}}>⚔️ هجوم جارٍ!</div>
+              <div style={{fontSize:12}}>
+                <strong style={{color:'var(--gold)'}}>{currentAttack.attackerName}</strong> يهاجم
+                <strong style={{color:'var(--red)'}}> {currentAttack.targetName}</strong>
+              </div>
+              {timer&&<div className="tbar urg" style={{marginTop:8}}>
+                <div style={{fontSize:16}}>⏱️</div>
+                <div style={{flex:1}}><div className="tval urg">{timer.deadline>Date.now()?fmtMs(timer.deadline-Date.now()):'⏰ انتهى!'}</div></div>
+              </div>}
+            </div>
+          )}
+
+          {/* آخر نتيجة */}
+          {qGameState?.lastResult&&!currentAttack&&(
+            <div className="ann ag" style={{marginBottom:10}}>
+              <div style={{fontSize:13,fontWeight:700}}>{qGameState.lastResult.msg}</div>
+            </div>
+          )}
+
+          {/* أسلحتي */}
+          <div className="card">
+            <div className="ctitle">🔫 أسلحتي</div>
+            <div style={{display:'flex',gap:8}}>
+              {Q_WEAPONS.map(w=>(
+                <div key={w.id} style={{flex:1,textAlign:'center',padding:8,background:'#09091e',borderRadius:8,border:'1px solid rgba(255,255,255,.05)'}}>
+                  <div style={{fontSize:20}}>{w.icon}</div>
+                  <div style={{fontSize:11,fontWeight:700,marginTop:2}}>{w.name}</div>
+                  <div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:myGroup?.weapons?.[w.id]>0?'var(--gold)':'var(--red)'}}>{myGroup?.weapons?.[w.id]||0}</div>
+                  <div style={{fontSize:9,color:'var(--muted)'}}>قوة: {w.power}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* شن هجوم */}
+          {!currentAttack&&<div className="card">
+            <div className="ctitle">⚔️ شن هجوم</div>
+            <div className="ig"><label className="lbl">اختر المجموعة المستهدفة</label>
+              <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+                {otherGroups.map(g=>(
+                  <button key={g.id} className={`btn ${qAttackTarget.group===g.id?'bg':'bgh'} bsm`}
+                    onClick={()=>setQAttackTarget(prev=>({...prev,group:g.id,groupName:g.name}))}>{g.name}</button>
+                ))}
+              </div>
+            </div>
+            {qAttackTarget.group&&<div className="ig"><label className="lbl">اختر الشجرة</label>
+              <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                {Q_TREES.map(t=>(
+                  <button key={t} className={`btn ${qAttackTarget.tree===t?'bg':'bgh'} bxs`}
+                    onClick={()=>setQAttackTarget(prev=>({...prev,tree:t}))}>{t}</button>
+                ))}
+              </div>
+            </div>}
+            {qAttackTarget.tree&&<div className="ig"><label className="lbl">اختر السلاح</label>
+              <div style={{display:'flex',gap:6}}>
+                {Q_WEAPONS.filter(w=>myGroup?.weapons?.[w.id]>0).map(w=>(
+                  <button key={w.id} className={`btn ${qAttackTarget.weapon===w.id?'bg':'bgh'} bsm`} style={{flex:1}}
+                    onClick={()=>setQAttackTarget(prev=>({...prev,weapon:w.id,weaponName:w.name}))}>
+                    {w.icon} {w.name} ({myGroup?.weapons?.[w.id]})
+                  </button>
+                ))}
+              </div>
+            </div>}
+            {qAttackTarget.group&&qAttackTarget.tree&&qAttackTarget.weapon&&(
+              <button className="btn br mt2" onClick={async()=>{
+                await update(ref(db,`qrooms/${qRoom}/game`),{
+                  currentAttack:{
+                    attackerId:qGroupId, attackerName:myGroup?.name,
+                    targetId:qAttackTarget.group, targetName:qAttackTarget.groupName,
+                    tree:qAttackTarget.tree, weapon:qAttackTarget.weapon, weaponName:qAttackTarget.weaponName,
+                    time:Date.now()
+                  }
+                });
+                setQAttackTarget({group:'',tree:'',weapon:''});
+                notify('⚔️ تم إرسال الهجوم — في انتظار المشرف','gold');
+              }}>⚔️ إرسال الهجوم</button>
+            )}
+          </div>}
+
+          {/* سجلي الخاص */}
+          <div className="card">
+            <div className="ctitle">📋 سجلي الخاص</div>
+            {(()=>{
+              const atkList=Object.values(qAttacks||{}).filter(a=>a.attackerId===qGroupId||a.targetId===qGroupId).sort((a,b)=>b.timestamp-a.timestamp);
+              if(atkList.length===0) return <div style={{textAlign:'center',color:'var(--muted)',fontSize:12,padding:10}}>لا أحداث بعد</div>;
+              return atkList.map((a,i)=>(
+                <div key={i} className="feed-item" style={{borderColor:a.attackerId===qGroupId?(a.result==='success'?'var(--green)':'var(--red)'):'var(--red)'}}>
+                  {a.attackerId===qGroupId
+                    ?<span>{a.result==='success'?`🎯 هاجمت ${a.targetName} / ${a.tree} — اصطدت ${a.hunted}`:`❌ هاجمت ${a.targetName} / ${a.tree} — فشل!`}</span>
+                    :<span>🛡️ <strong>{a.attackerName}</strong> هاجم شجرتك {a.tree} — {a.result==='success'?`خسرت ${a.hunted}`:'فشل هجومه!'}</span>
+                  }
+                </div>
+              ));
+            })()}
+          </div>
+        </div>
+      );
+    }
+
+    /* ── QUMAIRI: RESULTS ── */
+    if(gameScreen==='qumairi_results'){
+      const gList=Object.entries(qGroups).map(([id,g])=>({...g,id})).sort((a,b)=>(b.totalRemaining||0)-(a.totalRemaining||0));
+      return(
+        <div className="scr">
+          <div style={{textAlign:'center',marginBottom:14}}>
+            <div style={{fontSize:52,marginBottom:6}}>🏆</div>
+            <div className="ptitle" style={{fontSize:24}}>نتائج صيد القميري!</div>
+          </div>
+          {gList.map((g,i)=>(
+            <div key={g.id} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',background:i===0?'linear-gradient(135deg,rgba(240,192,64,.15),rgba(255,140,0,.08))':'#09091e',border:i===0?'2px solid var(--gold)':'1px solid rgba(255,255,255,.05)',borderRadius:12,marginBottom:8}}>
+              <div style={{fontFamily:'Cairo',fontSize:22,fontWeight:900,width:30,textAlign:'center',color:i===0?'var(--gold)':i===1?'rgba(200,200,220,.8)':i===2?'var(--red)':'var(--muted)'}}>
+                {i===0?'👑':i===1?'🥈':i===2?'🥉':i+1}
+              </div>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:700,fontSize:14}}>{g.name}</div>
+                <div style={{fontSize:11,color:'var(--muted)'}}>بقي {g.totalRemaining||0} قميري</div>
+              </div>
+              <div style={{fontFamily:'Cairo',fontSize:24,fontWeight:900,color:i===0?'var(--gold)':'var(--text)'}}>{g.totalRemaining||0}</div>
+            </div>
+          ))}
+          <button className="btn bgh mt3" onClick={()=>{setGameScreen('home');setSelectedGame(null);setQRoom('');setQRole(null);setQGroupId(null);setQDistribution({});setQDistLocked(false);}}>
+            🏟️ العودة لساحة الألعاب
+          </button>
+        </div>
+      );
+    }
+
     return null;
   };
 
@@ -2726,7 +3226,11 @@ export default function App() {
         {/* Right side — back/exit button when in a room */}
         {tab==='game'&&(roomCode||selectedGame)?(
           <button className="btn bgh bsm" style={{width:'auto',padding:'6px 12px',fontSize:12,color:'var(--muted)',border:'1px solid rgba(255,255,255,.1)'}}
-            onClick={()=>{if(roomCode)setModal({type:'exit_game'});else setSelectedGame(null);}}>
+            onClick={()=>{
+              if(roomCode) setModal({type:'exit_game'});
+              else if(gameScreen!=='home') setGameScreen('home');
+              else setSelectedGame(null);
+            }}>
             ← رجوع
           </button>
         ):(
