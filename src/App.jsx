@@ -2273,17 +2273,18 @@ export default function App() {
     if(gameScreen==='qumairi_lobby'){
       const unassigned = qMList.filter(m=>!m.groupId);
       const myMemberData = qMList.find(m=>m.id===qMyId);
-      // تحديث role و groupId من Firebase
-      if(myMemberData?.role==='leader' && qRole!=='leader' && qRole!=='admin'){
-        setQRole('leader');
-        setQGroupId(myMemberData.groupId);
-        qSave({qRole:'leader',qGroupId:myMemberData.groupId});
-      }
-      if(myMemberData?.groupId && !qGroupId && qRole!=='admin'){
-        setQGroupId(myMemberData.groupId);
-        const grp = qGList.find(g=>g.id===myMemberData.groupId);
-        if(grp) setQGroupName(grp.name);
-        qSave({qGroupId:myMemberData.groupId});
+      // تحديث role و groupId من Firebase دائماً
+      if(myMemberData && qRole!=='admin'){
+        if(myMemberData.role==='leader' && qRole!=='leader'){
+          setQRole('leader');
+          qSave({qRole:'leader'});
+        }
+        if(myMemberData.groupId && myMemberData.groupId!==qGroupId){
+          setQGroupId(myMemberData.groupId);
+          const grp = qGList.find(g=>g.id===myMemberData.groupId);
+          if(grp) setQGroupName(grp.name);
+          qSave({qGroupId:myMemberData.groupId,qGroupName:grp?.name});
+        }
       }
 
       return(
@@ -2391,7 +2392,7 @@ export default function App() {
           </>}
 
           {/* العضو/القائد — شاشة التوزيع */}
-          {!isAdmin&&qPhase==='distributing'&&isLeader&&!qDistLocked&&(()=>{
+          {!isAdmin&&qPhase==='distributing'&&isLeader&&!qMyGroup?.distributed&&(()=>{
             const total=Object.values(qDistribution).reduce((s,v)=>s+(parseInt(v)||0),0);
             const remaining=Q_TOTAL-total;
             return(
@@ -2422,11 +2423,11 @@ export default function App() {
             );
           })()}
 
-          {!isAdmin&&qPhase==='distributing'&&(qDistLocked||!isLeader)&&(
+          {!isAdmin&&qPhase==='distributing'&&(qMyGroup?.distributed||!isLeader)&&(
             <div className="card" style={{textAlign:'center',padding:20}}>
-              <div style={{fontSize:40}}>{qDistLocked?'✅':'⏳'}</div>
+              <div style={{fontSize:40}}>{qMyGroup?.distributed?'✅':'⏳'}</div>
               <div style={{fontFamily:'Cairo',fontSize:15,fontWeight:900,color:qDistLocked?'var(--green)':'var(--muted)',marginTop:8}}>
-                {qDistLocked?'تم التوزيع — في الانتظار':isLeader?'':'القائد يوزع القميري — انتظر'}
+                {qMyGroup?.distributed?'تم التوزيع — في انتظار باقي المجموعات':isLeader?'':'القائد يوزع القميري — انتظر'}
               </div>
             </div>
           )}
