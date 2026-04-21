@@ -364,6 +364,7 @@ export default function App() {
   const [qReveal, setQReveal]     = useState(null);
   const [qJoinLoading, setQJoinLoading] = useState(false);
   const [qCustomTimer, setQCustomTimer] = useState('');
+  const [qCountdown, setQCountdown] = useState(null); // عداد القميري الحقيقي
   const [qTurnOverlay, setQTurnOverlay] = useState(null); // {groupName, weapon}
 
   const Q_TREES = ['العرعر','سدرة','برسوبس','طلحة','كينة','أثلة','سمر','العوسج','غضاة','رمثة','الغاف'];
@@ -479,6 +480,21 @@ export default function App() {
       // Navigate based on phase later
     }catch(e){localStorage.removeItem('ng_qumairi');}
   }, []);
+
+  // Qumairi countdown timer — يحدّث كل ثانية
+  useEffect(()=>{
+    if(!qGameState?.timer?.deadline){setQCountdown(null);return;}
+    const tick=()=>{
+      const rem=Math.ceil((qGameState.timer.deadline-Date.now())/1000);
+      if(rem<=0){setQCountdown(0);return;}
+      setQCountdown(rem);
+      if(rem<=3) playSound('countdown_last');
+      else if(rem<=10) playSound('countdown');
+    };
+    tick();
+    const t=setInterval(tick,1000);
+    return()=>clearInterval(t);
+  },[qGameState?.timer?.deadline]);
 
   // Auto-navigate qumairi based on phase
   useEffect(()=>{
@@ -2489,15 +2505,26 @@ export default function App() {
             <div className="ptitle" style={{fontSize:18}}>👑 لوحة المشرف</div>
 
             {/* من يهاجم الآن — المشرف يختار */}
-            {!qCurrentAttack&&<div className="card">
-              <div className="ctitle">⚔️ اختر المجموعة المهاجمة</div>
-              <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
-                {qGList.map(g=>(
-                  <button key={g.id} className={`btn ${turnGroupId===g.id?'bg':'bgh'} bsm`}
-                    onClick={async()=>{await update(ref(db,`qrooms/${qRoom}/game`),{turnGroup:g.id});}}>{g.name}</button>
-                ))}
+            {!qCurrentAttack&&!qReveal&&<div className="card" style={{background:'linear-gradient(135deg,rgba(240,192,64,.08),rgba(255,140,0,.04))',border:'1px solid rgba(240,192,64,.2)'}}>
+              <div className="ctitle">⚔️ من يهاجم الآن؟</div>
+              <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
+                {qGList.map(g=>{
+                  const gMembers=qMList.filter(m=>m.groupId===g.id);
+                  const leader=gMembers.find(m=>m.role==='leader');
+                  return(
+                    <button key={g.id} className={`btn ${turnGroupId===g.id?'bg':'bgh'}`} style={{flex:1,minWidth:'30%',padding:'10px 8px'}}
+                      onClick={async()=>{await update(ref(db,`qrooms/${qRoom}/game`),{turnGroup:g.id});}}>
+                      <div style={{fontSize:14,fontWeight:900}}>{g.name}</div>
+                      <div style={{fontSize:10,opacity:.7}}>{g.totalRemaining} 🐦 · 👑 {leader?.name||'—'}</div>
+                      <div style={{fontSize:9,opacity:.5}}>{gMembers.length} عضو</div>
+                    </button>
+                  );
+                })}
               </div>
-              {turnGroup&&<div style={{marginTop:8,fontSize:12,color:'var(--gold)'}}>🎯 دور <strong>{turnGroup.name}</strong> — القائد يختار الهدف من جهازه</div>}
+              {turnGroup&&<div style={{padding:'10px 14px',background:'rgba(240,192,64,.1)',borderRadius:9,fontSize:13}}>
+                <span style={{color:'var(--gold)',fontWeight:900}}>🎯 دور {turnGroup.name}</span>
+                <span style={{color:'var(--muted)',fontSize:11}}> — القائد يختار الهدف والسلاح من جهازه</span>
+              </div>}
             </div>}
 
             {/* الهجوم الحالي */}
@@ -2526,11 +2553,10 @@ export default function App() {
                 </div>
               </>}
               {qTimer&&<>
-                <div className="tbar urg" style={{marginBottom:8}}>
-                  <div style={{fontSize:18}}>⏱️</div>
-                  <div style={{flex:1}}><div className="tval urg">{qTimer.deadline>Date.now()?fmtMs(qTimer.deadline-Date.now()):'⏰ انتهى!'}</div></div>
+                <div style={{textAlign:'center',marginBottom:10}}>
+                  <div className="q-timer-huge" style={{fontSize:56}}>{qCountdown!==null?(qCountdown>0?qCountdown:'⏰ انتهى!'):'...'}</div>
                 </div>
-                {/* صح / خطأ — يظهر دائماً */}
+                {/* صح / خطأ — دائماً */}
                 <div style={{display:'flex',gap:8}}>
                   <button className="btn bv" style={{flex:1}} onClick={async()=>{
                     const atk=qCurrentAttack;
@@ -2694,23 +2720,32 @@ export default function App() {
             </div>
           )}
 
-          {/* شاشة الدور — من يهاجم */}
+          {/* شاشة الدور — واضحة ومثيرة */}
           {qTurnOverlay&&!qReveal&&qCurrentAttack&&!qTimer&&(
             <div className="q-turn-overlay">
-              <div style={{fontSize:60}}>⚔️</div>
-              <div style={{fontFamily:'Cairo',fontSize:24,fontWeight:900,color:'var(--gold)',marginTop:12}}>{qTurnOverlay.groupName}</div>
-              <div style={{fontSize:14,color:'var(--muted)',marginTop:6}}>اختاروا هدفهم بسلاح <strong style={{color:'var(--text)'}}>{qTurnOverlay.weapon}</strong></div>
-              <div style={{fontSize:12,color:'var(--dim)',marginTop:16}}>في انتظار المشرف...</div>
+              <div style={{fontSize:70,animation:'treeBounce 1s ease infinite'}}>⚔️</div>
+              <div style={{fontFamily:'Cairo',fontSize:26,fontWeight:900,color:'var(--gold)',marginTop:14}}>{qTurnOverlay.groupName}</div>
+              <div style={{fontSize:15,color:'var(--text)',marginTop:8}}>
+                اختاروا هدفهم!
+              </div>
+              <div style={{display:'flex',gap:12,marginTop:14}}>
+                <div style={{textAlign:'center',padding:'8px 16px',background:'rgba(240,192,64,.1)',borderRadius:10}}>
+                  <div style={{fontSize:12,color:'var(--muted)'}}>السلاح</div>
+                  <div style={{fontSize:18,fontWeight:900,color:'var(--gold)',marginTop:2}}>{qTurnOverlay.weapon}</div>
+                </div>
+              </div>
+              <div className="q-suspense" style={{fontSize:12,color:'var(--dim)',marginTop:20}}>⏳ في انتظار المشرف يبدأ المؤقت...</div>
             </div>
           )}
 
           {/* العداد الضخم */}
-          {qTimer&&!qReveal&&(
+          {qTimer&&!qReveal&&qCountdown!==null&&(
             <div className="q-turn-overlay">
-              <div className="q-timer-huge">{qTimer.deadline>Date.now()?Math.ceil((qTimer.deadline-Date.now())/1000):'⏰'}</div>
-              <div style={{fontSize:14,color:'var(--muted)',marginTop:8}}>
+              <div className="q-timer-huge">{qCountdown>0?qCountdown:'⏰ انتهى!'}</div>
+              <div style={{fontSize:16,color:'var(--gold)',marginTop:10,fontWeight:700}}>
                 {qCurrentAttack?.attackerName} يهاجم {qCurrentAttack?.targetName}
               </div>
+              <div style={{fontSize:12,color:'var(--muted)',marginTop:4}}>🌳 {qCurrentAttack?.tree} — {qCurrentAttack?.weaponName}</div>
             </div>
           )}
 
@@ -2731,8 +2766,8 @@ export default function App() {
             </div>}
           </div>}
 
-          {/* آخر نتيجة — فقط إذا تخص مجموعتي */}
-          {qGameState?.lastResult&&!qCurrentAttack&&(qGameState.lastResult.attackerId===qGroupId||qGameState.lastResult.targetId===qGroupId)&&(
+          {/* آخر نتيجة — فقط إذا لم تكن شاشة الكشف ظاهرة */}
+          {qGameState?.lastResult&&!qCurrentAttack&&!qReveal&&(qGameState.lastResult.attackerId===qGroupId||qGameState.lastResult.targetId===qGroupId)&&(
             <div className={`ann ${qGameState.lastResult.result==='success'?(qGameState.lastResult.attackerId===qGroupId?'av':'ar'):'ag'}`} style={{marginBottom:8}}>
               <div style={{fontSize:13,fontWeight:700}}>
                 {qGameState.lastResult.attackerId===qGroupId
@@ -2757,8 +2792,12 @@ export default function App() {
           </div>
 
           {/* شن هجوم — القائد فقط عند دوره */}
-          {isLeader&&!qCurrentAttack&&qGameState?.turnGroup===qGroupId&&<div className="card">
-            <div className="ctitle">⚔️ دورك — شن هجوم!</div>
+          {isLeader&&!qCurrentAttack&&qGameState?.turnGroup===qGroupId&&<div className="card" style={{background:'linear-gradient(135deg,rgba(230,57,80,.08),rgba(200,40,60,.04))',border:'1.5px solid rgba(230,57,80,.3)'}}>
+            <div style={{textAlign:'center',marginBottom:10}}>
+              <div style={{fontSize:36}}>⚔️</div>
+              <div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:'var(--red)'}}>دورك — شن هجوم!</div>
+              <div style={{fontSize:11,color:'var(--muted)'}}>اختر المجموعة المستهدفة ثم الشجرة والسلاح</div>
+            </div>
             {/* الدرع — القائد يفعّله مرة واحدة */}
             {!qMyGroup?.shield&&<div style={{display:'flex',gap:6,marginBottom:10}}>
               <button className="btn bp bsm" style={{flex:1}} onClick={async()=>{
@@ -2809,8 +2848,12 @@ export default function App() {
           </div>}
 
           {/* ليس دوري */}
-          {isLeader&&!qCurrentAttack&&qGameState?.turnGroup!==qGroupId&&(
-            <div style={{textAlign:'center',padding:14,color:'var(--muted)',fontSize:12}}>⏳ ليس دورك — انتظر المشرف</div>
+          {isLeader&&!qCurrentAttack&&qGameState?.turnGroup!==qGroupId&&!qReveal&&(
+            <div className="card" style={{textAlign:'center',padding:16}}>
+              <div style={{fontSize:36}}>⏳</div>
+              <div style={{fontFamily:'Cairo',fontSize:15,fontWeight:900,color:'var(--muted)',marginTop:6}}>ليس دورك</div>
+              <div style={{fontSize:11,color:'var(--dim)',marginTop:4}}>المشرف يحدد الأدوار — انتظر</div>
+            </div>
           )}
 
 
@@ -2833,26 +2876,55 @@ export default function App() {
 
     /* ── RESULTS ── */
     if(gameScreen==='qumairi_results'){
-      const sorted=qGList.sort((a,b)=>(b.totalRemaining||0)-(a.totalRemaining||0));
+      const sorted=[...qGList].sort((a,b)=>(b.totalRemaining||0)-(a.totalRemaining||0));
+      const totalHunted=Object.values(qAttacks||{}).filter(a=>a.result==='success').reduce((s,a)=>s+(a.hunted||0),0);
       return(
         <div className="scr">
-          <div style={{textAlign:'center',marginBottom:14}}>
-            <div style={{fontSize:52}}>🏆</div>
-            <div className="ptitle" style={{fontSize:24}}>نتائج صيد القميري!</div>
+          <div style={{textAlign:'center',padding:'16px 0'}}>
+            <div style={{fontSize:60,animation:'bnc 1s infinite'}}>🏆</div>
+            <div className="ptitle" style={{fontSize:26,marginTop:8}}>نتائج صيد القميري!</div>
+            <div className="psub">المجموعة صاحبة أكثر قميري تفوز!</div>
           </div>
-          {sorted.map((g,i)=>(
-            <div key={g.id} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',background:i===0?'linear-gradient(135deg,rgba(240,192,64,.15),rgba(255,140,0,.08))':'#09091e',border:i===0?'2px solid var(--gold)':'1px solid rgba(255,255,255,.05)',borderRadius:12,marginBottom:8}}>
-              <div style={{fontFamily:'Cairo',fontSize:22,fontWeight:900,width:30,color:i===0?'var(--gold)':i===1?'rgba(200,200,220,.8)':'var(--muted)'}}>
-                {i===0?'👑':i===1?'🥈':i===2?'🥉':i+1}
+
+          {/* ملخص سريع */}
+          <div className="sg sg3" style={{marginBottom:12}}>
+            <div className="sbox"><div className="snum">{sorted.length}</div><div className="slbl">مجموعات</div></div>
+            <div className="sbox"><div className="snum" style={{color:'var(--red)'}}>{totalHunted}</div><div className="slbl">قميري صيدت</div></div>
+            <div className="sbox"><div className="snum" style={{color:'var(--green)'}}>{Object.values(qAttacks||{}).length}</div><div className="slbl">هجمات</div></div>
+          </div>
+
+          {/* الترتيب — من الأخير للأول (تشويق) */}
+          {[...sorted].reverse().map((g,i)=>{
+            const rank=sorted.length-i;
+            const isWinner=rank===1;
+            return(
+              <div key={g.id} style={{
+                display:'flex',alignItems:'center',gap:10,padding:'14px 16px',
+                background:isWinner?'linear-gradient(135deg,rgba(240,192,64,.2),rgba(255,140,0,.1))':'#09091e',
+                border:isWinner?'2px solid var(--gold)':rank===2?'1px solid rgba(200,200,220,.2)':'1px solid rgba(255,255,255,.05)',
+                borderRadius:14,marginBottom:8,
+                animation:isWinner?'fi .5s ease':'none'
+              }}>
+                <div style={{fontFamily:'Cairo',fontSize:isWinner?28:20,fontWeight:900,width:34,textAlign:'center',
+                  color:isWinner?'var(--gold)':rank===2?'rgba(200,200,220,.8)':rank===3?'var(--red)':'var(--muted)'}}>
+                  {isWinner?'👑':rank===2?'🥈':rank===3?'🥉':rank}
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:900,fontSize:isWinner?16:14,color:isWinner?'var(--gold)':'var(--text)'}}>{g.name}</div>
+                  <div style={{fontSize:10,color:'var(--muted)',marginTop:2}}>بقي لهم {g.totalRemaining||0} قميري</div>
+                </div>
+                <div style={{fontFamily:'Cairo',fontSize:isWinner?30:22,fontWeight:900,color:isWinner?'var(--gold)':'var(--text)'}}>
+                  {g.totalRemaining||0}
+                </div>
+                <div style={{fontSize:16}}>{isWinner?'🐦':'🪶'}</div>
               </div>
-              <div style={{flex:1}}><div style={{fontWeight:700}}>{g.name}</div></div>
-              <div style={{fontFamily:'Cairo',fontSize:24,fontWeight:900,color:i===0?'var(--gold)':'var(--text)'}}>{g.totalRemaining||0} 🐦</div>
-            </div>
-          ))}
+            );
+          })}
+
           <button className="btn bgh mt3" onClick={()=>{
             setGameScreen('home');setSelectedGame(null);setQRoom('');setQRole(null);setQGroupId(null);setQDistribution({});setQDistLocked(false);
             localStorage.removeItem('ng_qumairi');
-          }}>🏟️ ساحة الألعاب</button>
+          }}>🏟️ العودة لساحة الألعاب</button>
         </div>
       );
     }
