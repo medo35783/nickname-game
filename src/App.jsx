@@ -2391,13 +2391,35 @@ export default function App() {
             })()}
           </>}
 
-          {/* العضو/القائد — شاشة التوزيع */}
-          {!isAdmin&&qPhase==='distributing'&&isLeader&&!qMyGroup?.distributed&&(()=>{
+          {/* شاشة التوزيع — حسب الحالة */}
+          {!isAdmin&&qPhase==='distributing'&&(()=>{
+            // 1. ما عنده مجموعة بعد
+            if(!qGroupId||!qMyGroup) return(
+              <div className="card" style={{textAlign:'center',padding:20}}>
+                <div style={{fontSize:40}}>⏳</div>
+                <div style={{fontFamily:'Cairo',fontSize:15,fontWeight:900,color:'var(--muted)',marginTop:8}}>في انتظار المشرف يحدد مجموعتك</div>
+              </div>
+            );
+            // 2. المجموعة وزعت
+            if(qMyGroup.distributed) return(
+              <div className="card" style={{textAlign:'center',padding:20}}>
+                <div style={{fontSize:40}}>✅</div>
+                <div style={{fontFamily:'Cairo',fontSize:15,fontWeight:900,color:'var(--green)',marginTop:8}}>تم التوزيع — في انتظار باقي المجموعات</div>
+              </div>
+            );
+            // 3. ليس القائد
+            if(!isLeader) return(
+              <div className="card" style={{textAlign:'center',padding:20}}>
+                <div style={{fontSize:40}}>⏳</div>
+                <div style={{fontFamily:'Cairo',fontSize:15,fontWeight:900,color:'var(--muted)',marginTop:8}}>القائد 👑 يوزع القميري — انتظر</div>
+              </div>
+            );
+            // 4. القائد يوزّع
             const total=Object.values(qDistribution).reduce((s,v)=>s+(parseInt(v)||0),0);
             const remaining=Q_TOTAL-total;
             return(
               <div className="card">
-                <div className="ctitle">🌳 وزّع {Q_TOTAL} قميري</div>
+                <div className="ctitle">🌳 وزّع {Q_TOTAL} قميري على الأشجار</div>
                 <div style={{textAlign:'center',marginBottom:12}}>
                   <div style={{fontFamily:'Cairo',fontSize:32,fontWeight:900,color:remaining===0?'var(--green)':remaining<0?'var(--red)':'var(--gold)'}}>{remaining}</div>
                   <div style={{fontSize:11,color:'var(--muted)'}}>قميري متبقي</div>
@@ -2416,21 +2438,11 @@ export default function App() {
                 <button className="btn bg mt3" disabled={remaining!==0} onClick={async()=>{
                   const trees={};Q_TREES.forEach(t=>{trees[t]=parseInt(qDistribution[t])||0;});
                   await update(ref(db,`qrooms/${qRoom}/groups/${qGroupId}`),{trees,distributed:true,totalRemaining:Q_TOTAL});
-                  setQDistLocked(true); qSave({qDistLocked:true});
                   notify('✅ تم التوزيع!','success');
                 }}>{remaining===0?'✅ تأكيد التوزيع':`وزّع ${Math.abs(remaining)} المتبقية`}</button>
               </div>
             );
           })()}
-
-          {!isAdmin&&qPhase==='distributing'&&(qMyGroup?.distributed||!isLeader)&&(
-            <div className="card" style={{textAlign:'center',padding:20}}>
-              <div style={{fontSize:40}}>{qMyGroup?.distributed?'✅':'⏳'}</div>
-              <div style={{fontFamily:'Cairo',fontSize:15,fontWeight:900,color:qDistLocked?'var(--green)':'var(--muted)',marginTop:8}}>
-                {qMyGroup?.distributed?'تم التوزيع — في انتظار باقي المجموعات':isLeader?'':'القائد يوزع القميري — انتظر'}
-              </div>
-            </div>
-          )}
 
           {!isAdmin&&qPhase==='lobby'&&(
             <div className="card" style={{textAlign:'center',padding:20}}>
