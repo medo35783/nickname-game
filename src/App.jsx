@@ -481,20 +481,24 @@ export default function App() {
     }catch(e){localStorage.removeItem('ng_qumairi');}
   }, []);
 
-  // Qumairi countdown timer — يحدّث كل ثانية
+  // Qumairi countdown timer — يحدّث كل ثانية بدقة
+  const qTimerDeadline = qGameState?.timer?.deadline;
   useEffect(()=>{
-    if(!qGameState?.timer?.deadline){setQCountdown(null);return;}
+    if(!qTimerDeadline){setQCountdown(null);return;}
+    const dl = qTimerDeadline;
     const tick=()=>{
-      const rem=Math.ceil((qGameState.timer.deadline-Date.now())/1000);
-      if(rem<=0){setQCountdown(0);return;}
-      setQCountdown(rem);
-      if(rem<=3) playSound('countdown_last');
-      else if(rem<=10) playSound('countdown');
+      const rem=Math.ceil((dl-Date.now())/1000);
+      if(rem<=0){setQCountdown(0);}
+      else{
+        setQCountdown(rem);
+        if(rem<=3) playSound('countdown_last');
+        else if(rem<=10) playSound('countdown');
+      }
     };
     tick();
     const t=setInterval(tick,1000);
     return()=>clearInterval(t);
-  },[qGameState?.timer?.deadline]);
+  },[qTimerDeadline]);
 
   // Auto-navigate qumairi based on phase
   useEffect(()=>{
@@ -811,9 +815,10 @@ export default function App() {
     const allNames = shuffle(playersList.map(p=>p.id));
     // clear previous attacks
     await set(ref(db, `rooms/${roomCode}/currentRound`), { attacks:{} });
-    // امسح عقوبات اللقب المسموم المنتهية (الجولة السابقة)
+    // امسح عقوبات اللقب المسموم — الجولة الممنوعة انتهت
     const banCleanup = {};
     playersList.forEach(p=>{
+      // اللاعب كان ممنوع في جولة سابقة — امسح العقوبة
       if(p.isBannedNextRound && p.isBannedNextRound < rn){
         banCleanup[`rooms/${roomCode}/players/${p.id}/isBannedNextRound`] = null;
       }
@@ -848,10 +853,10 @@ export default function App() {
 
     const attackerNick = attackerNickOverride || myNickLocal || '(لاعب)';
 
-    // تحقق من عقوبة اللقب المسموم — isBannedNextRound يحتوي على رقم الجولة الممنوع فيها
+    // تحقق من عقوبة اللقب المسموم
     const attackerData = playersList.find(p=>p.nick===attackerNick||p.nick2===attackerNick);
-    if(attackerData?.isBannedNextRound === roundNum){
-      notify('☠️ أنت ممنوع من الهجوم هذه الجولة — عقوبة اللقب المسموم من الجولة الماضية!','error');
+    if(attackerData?.isBannedNextRound && attackerData.isBannedNextRound >= roundNum){
+      notify('☠️ أنت ممنوع من الهجوم هذه الجولة — عقوبة اللقب المسموم!','error');
       return;
     }
 
@@ -1456,15 +1461,26 @@ export default function App() {
             </div>
           )}
           {gameState?.silentPending && !isSilentActive && (
-            <div style={{background:'rgba(155,89,182,.08)',border:'1px solid rgba(155,89,182,.3)',borderRadius:9,padding:'8px 12px',marginBottom:8,display:'flex',alignItems:'center',gap:8,fontSize:12,color:'var(--purple)'}}>
-              <span style={{fontSize:16}}>🎭</span>
-              <span>الجولة السابقة كانت صامتة — ستُكشف نتائجها مع هذه الجولة!</span>
+            <div style={{background:'rgba(155,89,182,.1)',border:'1.5px solid rgba(155,89,182,.4)',borderRadius:10,padding:'10px 14px',marginBottom:8,display:'flex',alignItems:'center',gap:8,fontSize:13,color:'var(--purple)'}}>
+              <span style={{fontSize:18}}>🤫</span>
+              <span><strong>جولة صامتة سابقة!</strong> — ستُكشف نتائجها مع هذه الجولة</span>
             </div>
           )}
+          {/* بانر الحرمان من اللقب المسموم */}
+          {(()=>{
+            const myP = playersList.find(p=>p.nick===myNickLocal||p.nick2===myNickLocal);
+            if(myP?.isBannedNextRound && myP.isBannedNextRound >= roundNum) return(
+              <div style={{background:'rgba(230,57,80,.1)',border:'1px solid rgba(230,57,80,.4)',borderRadius:9,padding:'10px 12px',marginBottom:8,display:'flex',alignItems:'center',gap:8,fontSize:13,color:'var(--red)'}}>
+                <span style={{fontSize:18}}>☠️</span>
+                <span><strong>أنت محروم هذه الجولة!</strong> — عقوبة اللقب المسموم من الجولة الماضية</span>
+              </div>
+            );
+            return null;
+          })()}
           {activePoisonNick&&(
             <div style={{background:'rgba(155,89,182,.08)',border:'1px solid rgba(155,89,182,.3)',borderRadius:9,padding:'8px 12px',marginBottom:8,display:'flex',alignItems:'center',gap:8,fontSize:12,color:'var(--purple)'}}>
               <span style={{fontSize:16}}>☠️</span>
-              <span>تحذير: <strong>يوجد لقب مسموم</strong> في هذه الجولة — إذا هاجمته وأخطأت تخسر جولة هجوم!</span>
+              <span>تحذير: <strong>يوجد لقب مسموم</strong> — إذا هاجمته وأخطأت تخسر جولة!</span>
             </div>
           )}
           {attacksPerRound>1&&(
@@ -1509,7 +1525,7 @@ export default function App() {
           </div>}
 
           {/* SUBMITTED */}
-          {myAttacksDone&&!proxyFor?(
+          {(myAttacksDone||myDoneCount>=attacksPerRound)&&!proxyFor?(
             <div className="card">
               <div className="waiting-box">
                 <div className="waiting-icon">⏳</div>
@@ -2233,6 +2249,24 @@ export default function App() {
           <div style={{textAlign:'center',padding:'10px 0'}}><div style={{fontSize:46}}>🦅</div></div>
           <div className="ptitle">إنشاء غرفة — صيد القميري</div>
           <div className="psub">أنت المشرف — تحكم باللعبة كاملة</div>
+
+          {/* شرح سريع */}
+          <div className="card" style={{marginBottom:12}}>
+            <div className="ctitle">📖 كيف تلعب؟</div>
+            {[
+              ['👥','أنشئ المجموعات وعيّن قائداً لكل واحدة'],
+              ['🌳','كل مجموعة توزع 100 قميري سراً على 11 شجرة'],
+              ['⚔️','حدد من يهاجم — القائد يختار الهدف والشجرة والسلاح'],
+              ['⏱️','اسأل السؤال → حدد المؤقت → احكم صح أو خطأ'],
+              ['🎯','إصابة = اصطياد القميري من الشجرة المختارة'],
+              ['❌','إجابة خاطئة = السلاح يضيع بدون إصابة'],
+              ['🏆','أكثر مجموعة بقي لها قميري تفوز!'],
+            ].map(([ic,tx],i)=>(
+              <div key={i} style={{padding:'5px 0',fontSize:12,color:'var(--muted)',display:'flex',gap:6}}>
+                <span>{ic}</span><span>{tx}</span>
+              </div>
+            ))}
+          </div>
           <button className="btn bg" onClick={async()=>{
             const code=genCode();
             setQRoom(code); setQRole('admin');
@@ -2252,6 +2286,11 @@ export default function App() {
           <button className="btn bgh bsm" style={{width:'auto',marginBottom:12}} onClick={()=>{setGameScreen('home');setSelectedGame('qumairi');}}>← رجوع</button>
           <div style={{textAlign:'center',padding:'10px 0'}}><div style={{fontSize:46}}>🦅</div></div>
           <div className="ptitle">انضمام — صيد القميري</div>
+          <div style={{background:'rgba(46,204,113,.06)',border:'1px solid rgba(46,204,113,.2)',borderRadius:10,padding:'10px 12px',marginBottom:10,fontSize:11,color:'var(--muted)',lineHeight:1.8}}>
+            🦅 كل مجموعة توزع 100 قميري على 11 شجرة سراً<br/>
+            ⚔️ هاجم أشجار الخصوم بالأسلحة واصطد القميري<br/>
+            🏆 أكثر مجموعة بقي لها قميري تفوز!
+          </div>
           <div className="card">
             <div className="ig"><label className="lbl">🔢 رمز الغرفة</label>
               <input className="inp big" placeholder="× × × × × ×" maxLength={6} value={qJoinInput} onChange={e=>{setQJoinInput(e.target.value.replace(/\D/g,''));setQJoinErr('');}}/>
