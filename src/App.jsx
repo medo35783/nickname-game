@@ -2257,15 +2257,37 @@ export default function App() {
           <div className="card" style={{marginBottom:12}}>
             <div className="ctitle">📖 كيف تلعب؟</div>
             {[
-              ['👥','أنشئ المجموعات وعيّن قائداً لكل واحدة'],
+              ['👥','أنشئ المجموعات (2-6) وعيّن قائداً لكل واحدة'],
               ['🌳','كل مجموعة توزع 100 قميري سراً على 11 شجرة'],
               ['⚔️','حدد من يهاجم — القائد يختار الهدف والشجرة والسلاح'],
-              ['⏱️','اسأل السؤال → حدد المؤقت → احكم صح أو خطأ'],
-              ['🎯','إصابة = اصطياد القميري من الشجرة المختارة'],
+              ['⏱️','اسأل السؤال شفهياً → حدد المؤقت → احكم صح أو خطأ'],
+              ['🎯','إصابة = اصطياد القميري من الشجرة (بحسب قوة السلاح)'],
               ['❌','إجابة خاطئة = السلاح يضيع بدون إصابة'],
               ['🏆','أكثر مجموعة بقي لها قميري تفوز!'],
             ].map(([ic,tx],i)=>(
               <div key={i} style={{padding:'5px 0',fontSize:12,color:'var(--muted)',display:'flex',gap:6}}>
+                <span>{ic}</span><span>{tx}</span>
+              </div>
+            ))}
+            <div className="div">الأسلحة</div>
+            <div style={{display:'flex',gap:6,marginBottom:8}}>
+              {[['🔫','شوزل','3 رصاصات','يصيد حتى 30','صعب'],['🎯','أم صتمة','5 رصاصات','يصيد حتى 20','متوسط'],['🪃','نبيطة','10 رصاصات','يصيد حتى 10','سهل']].map(([ic,name,qty,power,diff],i)=>(
+                <div key={i} style={{flex:1,textAlign:'center',padding:'8px 4px',background:'#09091e',borderRadius:8,border:'1px solid rgba(255,255,255,.05)'}}>
+                  <div style={{fontSize:18}}>{ic}</div>
+                  <div style={{fontSize:11,fontWeight:900,color:'var(--gold)',marginTop:2}}>{name}</div>
+                  <div style={{fontSize:9,color:'var(--muted)'}}>{qty}</div>
+                  <div style={{fontSize:9,color:'var(--green)'}}>{power}</div>
+                  <div style={{fontSize:8,color:'var(--blue)'}}>سؤال {diff}</div>
+                </div>
+              ))}
+            </div>
+            <div className="div">أدوات خاصة</div>
+            {[
+              ['🛡️','الدرع — القائد يحمي شجرة واحدة (مرة واحدة باللعبة)'],
+              ['☠️','الشجرة المسمومة — المشرف يختارها سراً، من يهاجمها يخسر سلاح إضافي'],
+              ['🌪️','العاصفة الرملية — الشجرة المستهدفة عشوائية!'],
+            ].map(([ic,tx],i)=>(
+              <div key={i} style={{padding:'4px 0',fontSize:11,color:'var(--muted)',display:'flex',gap:6}}>
                 <span>{ic}</span><span>{tx}</span>
               </div>
             ))}
@@ -2291,8 +2313,10 @@ export default function App() {
           <div className="ptitle">انضمام — صيد القميري</div>
           <div style={{background:'rgba(46,204,113,.06)',border:'1px solid rgba(46,204,113,.2)',borderRadius:10,padding:'10px 12px',marginBottom:10,fontSize:11,color:'var(--muted)',lineHeight:1.8}}>
             🦅 كل مجموعة توزع 100 قميري على 11 شجرة سراً<br/>
-            ⚔️ هاجم أشجار الخصوم بالأسلحة واصطد القميري<br/>
-            🏆 أكثر مجموعة بقي لها قميري تفوز!
+            ⚔️ القائد يختار الهدف والشجرة والسلاح<br/>
+            🔫 شوزل (حتى 30) | 🎯 أم صتمة (حتى 20) | 🪃 نبيطة (حتى 10)<br/>
+            🛡️ درع يحمي شجرة واحدة (مرة وحدة)<br/>
+            🏆 أكثر مجموعة بقي لها قميري تفوز
           </div>
           <div className="card">
             <div className="ig"><label className="lbl">🔢 رمز الغرفة</label>
@@ -2632,27 +2656,40 @@ export default function App() {
                     u[`qrooms/${qRoom}/groups/${atk.targetId}/totalRemaining`]=(tg?.totalRemaining||0)-hunted;
                     u[`qrooms/${qRoom}/groups/${atk.attackerId}/weapons/${atk.weapon}`]=(qGroups[atk.attackerId]?.weapons?.[atk.weapon]||1)-1;
 
-                    // الشجرة المسمومة — خسارة سلاح إضافي من نفس النوع
+                    // الشجرة المسمومة — خصم سلاح إضافي بترتيب: نفس النوع → الأقل
+                    let poisonMsg = null;
                     if(qGameState?.cursedTree===atk.tree){
-                      const currentQty = (qGroups[atk.attackerId]?.weapons?.[atk.weapon]||0);
-                      // السلاح الأساسي خُصم أعلاه — نخصم واحد إضافي من نفس النوع
-                      if(currentQty > 0){
-                        u[`qrooms/${qRoom}/groups/${atk.attackerId}/weapons/${atk.weapon}`] = currentQty - 1;
+                      const atkW = {...(qGroups[atk.attackerId]?.weapons||{})};
+                      // السلاح الأساسي خُصم أعلاه — احسب المتبقي
+                      atkW[atk.weapon] = (atkW[atk.weapon]||0) - 1;
+                      const order = ['showzel','omsagma','nabeeta'];
+                      const startIdx = order.indexOf(atk.weapon);
+                      let deducted = null;
+                      // ابحث من نفس النوع ثم الأقل
+                      for(let wi=startIdx; wi<order.length; wi++){
+                        if((atkW[order[wi]]||0)>0){
+                          u[`qrooms/${qRoom}/groups/${atk.attackerId}/weapons/${order[wi]}`] = atkW[order[wi]] - 1;
+                          deducted = Q_WEAPONS.find(w=>w.id===order[wi])?.name;
+                          break;
+                        }
                       }
-                      // رسالة خاصة — تُرسل كـ poisonMsg في lastResult
-                      u[`qrooms/${qRoom}/game/lastResult`] = {...atk,result:'success',hunted,
-                        msg:hunted>0?`🎯 ${hunted} قميري`:'🌳 الشجرة فارغة',
-                        poisonMsg: '☠️ أصبت الشجرة المسمومة — ذخيرتك نفدت',
-                        poisonTarget: atk.attackerId,
-                        timestamp:Date.now()};
+                      poisonMsg = deducted
+                        ? `☠️ الشجرة المسمومة — خسرت ${deducted} إضافي`
+                        : '☠️ الشجرة المسمومة';
                     }
 
+                    const ts = Date.now();
                     const logRef=push(ref(db,`qrooms/${qRoom}/attacks`));
-                    u[`qrooms/${qRoom}/attacks/${logRef.key}`]={...atk,result:'success',hunted,timestamp:Date.now()};
-                    u[`qrooms/${qRoom}/game/currentAttack`]=null;u[`qrooms/${qRoom}/game/timer`]=null;
-                    u[`qrooms/${qRoom}/game/lastResult`]={...atk,result:'success',hunted,msg:hunted>0?`🎯 ${hunted} قميري`:'🌳 الشجرة فارغة',timestamp:Date.now()};
+                    u[`qrooms/${qRoom}/attacks/${logRef.key}`]={...atk,result:'success',hunted,timestamp:ts};
+                    u[`qrooms/${qRoom}/game/currentAttack`]=null;
+                    u[`qrooms/${qRoom}/game/timer`]=null;
+                    u[`qrooms/${qRoom}/game/lastResult`]={...atk,result:'success',hunted,
+                      msg:hunted>0?`🎯 ${hunted} قميري`:'🌳 الشجرة فارغة',
+                      poisonMsg, poisonTarget:poisonMsg?atk.attackerId:null,
+                      timestamp:ts};
+                    u[`qrooms/${qRoom}/game/showResult`]=true;
                     await update(ref(db),u);
-                    playSound('explosion');notify(hunted>0?`🎯 ${hunted}!`:'فارغة!','gold');
+                    playSound('explosion');
                   }}>✅ صح</button>
                   <button className="btn br" style={{flex:1}} onClick={async()=>{
                     const atk=qCurrentAttack;
@@ -2773,6 +2810,13 @@ export default function App() {
                   </div>
                   <div className="q-num" style={{color:'var(--green)'}}>-{qReveal.hunted}</div>
                   <div style={{fontFamily:'Cairo',fontSize:20,fontWeight:900,color:'var(--gold)',marginTop:4}}>تم اصطياد {qReveal.hunted} قميري</div>
+                  <div style={{marginTop:10,padding:'10px 16px',background:'rgba(255,255,255,.05)',borderRadius:10,fontSize:13}}>
+                    <div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:'var(--gold)',fontWeight:700}}>{qReveal.attackerName}</span><span style={{color:'var(--red)',fontWeight:900}}>-{qReveal.hunted} 🐦</span></div>
+                    <div style={{fontSize:11,color:'var(--muted)',marginTop:3}}>هاجم <strong style={{color:'var(--text)'}}>{qReveal.targetName}</strong> / 🌳 {qReveal.tree}</div>
+                  </div>
+                  {qReveal.poisonMsg&&<div style={{marginTop:8,padding:'8px 14px',background:'rgba(155,89,182,.2)',border:'1.5px solid rgba(155,89,182,.5)',borderRadius:8,fontSize:13,color:'var(--purple)',fontWeight:700}}>
+                    {qReveal.poisonMsg}
+                  </div>}
                   <div style={{fontSize:12,color:'var(--muted)',marginTop:8}}>{qReveal.attackerName} أصاب {qReveal.tree} عند {qReveal.targetName}</div>
                   {qReveal.poisonMsg&&<div style={{marginTop:10,padding:'8px 14px',background:'rgba(155,89,182,.15)',border:'1px solid rgba(155,89,182,.4)',borderRadius:8,fontSize:12,color:'var(--purple)'}}>
                     {qReveal.poisonMsg}
