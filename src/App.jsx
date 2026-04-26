@@ -330,7 +330,7 @@ export default function App() {
   // nickMode الفعلي: من Firebase للمتسابقين، من الـ state للمشرف
   const effectiveNickMode = role==='admin' ? nickMode : (gameState?.nickMode||1);
   const [form, setForm]          = useState({name:'',nick:'',nick2:''});
-  const [attackDur, setAttackDur] = useState({h:0, m:30, s:0});
+  const [attackDur, setAttackDur] = useState({h:0, m:5, s:0}); // افتراضي 5 دقائق
 
   /* ── ATTACK SELECTION ── */
   const [myNick, setMyNick]      = useState(null);
@@ -522,7 +522,7 @@ export default function App() {
 
     // مرحلة 1: صمت — ثانيتين
     setQReveal({phase:'suspense',tree:lr.tree,weapon:lr.weaponName,attackerName:lr.attackerName,targetName:lr.targetName,
-      poisonMsg:lr.poisonTarget===qGroupId?lr.poisonMsg:null});
+      poisonMsg:lr.poisonMsg});
 
     // مرحلة 2: صوت السلاح — بعد ثانيتين
     setTimeout(()=>{
@@ -914,11 +914,11 @@ export default function App() {
 
     // احفظ attackerPlayerId ليكون الفحص دقيقاً (لاعب واحد = هوية واحدة حتى لو عنده لقبان)
     const actualAttackerId = attackerPlayerObj?.id || myId || null;
-    const newAttackRef = push(attacksRef(roomCode));
-    await set(newAttackRef, {
+    // Firebase Transaction — يمنع Race Conditions والنقر المزدوج
+    const attackData = {
       attackerNick,
       attackerId: myId || attackerNickOverride,
-      attackerPlayerId: actualAttackerId, // ID اللاعب — للعد الدقيق
+      attackerPlayerId: actualAttackerId,
       targetNick: myNick,
       guessedId: myGuess,
       guessedName: guessedPlayer?.name,
@@ -926,7 +926,14 @@ export default function App() {
       realOwnerName: realOwner.name,
       correct,
       time: Date.now(),
-    });
+    };
+    const newAttackRef = push(attacksRef(roomCode));
+    try {
+      await set(newAttackRef, attackData);
+    } catch(err) {
+      notify('⚠️ فشل الإرسال — حاول مرة أخرى','error');
+      return;
+    }
     const myNewCount = myAttacksCount + 1;
     // لا نحتاج setMySubmitted — myAttacksDone يحسب من Firebase
     // دائماً أعد تهيئة الاختيار بعد كل هجمة
@@ -1079,7 +1086,8 @@ export default function App() {
         const submitted = currentAttacks.some(a=>a.attackerNick===p.nick);
         const nm = submitted ? 0 : (p.missedRounds||0)+1;
         updates[`rooms/${roomCode}/players/${p.id}/missedRounds`]=nm;
-        if(nm>=2){
+        // المعاقب بالمسموم لا يُطرد بالخمول
+        if(nm>=2 && !p.isBannedNextRound){
           updates[`rooms/${roomCode}/players/${p.id}/status`]='inactive';
           updates[`rooms/${roomCode}/players/${p.id}/eliminatedRound`]=roundNum;
           exitList.push({nick:p.nick, name:p.name, eliminatedBy:'الخمول', attackers:[], initials:p.initials, colorIdx:p.colorIdx, inactive:true});
@@ -2055,8 +2063,27 @@ export default function App() {
             }
           </>}
 
-          {/* ══ الأشرس هجوماً ══ */}
+          {/* ══ ضحايا اللقب المسموم ══ */}
           {statsTab==='fierce'&&<>
+            {(()=>{
+              const poisoned = playersList.filter(p=>p.isBannedNextRound);
+              if(poisoned.length===0) return null;
+              return(
+                <div style={{marginBottom:14,padding:'10px 14px',background:'rgba(155,89,182,.08)',border:'1px solid rgba(155,89,182,.3)',borderRadius:10}}>
+                  <div style={{fontSize:12,fontWeight:700,color:'var(--purple)',marginBottom:6}}>☠️ ضحايا اللقب المسموم — {poisoned.length} لاعب</div>
+                  {poisoned.map(p=>(
+                    <div key={p.id} style={{fontSize:12,color:'var(--muted)',padding:'3px 0'}}>
+                      {role==='admin'
+                        ?<span>{p.name} — <span style={{color:'var(--gold)'}}>"{p.nick}"</span> — ممنوع الجولة {p.isBannedNextRound}</span>
+                        :<span><span style={{color:'var(--gold)'}}>"{p.nick}"</span> — ممنوع من الهجوم</span>
+                      }
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          {/* ══ الأشرس هجوماً ══ */}
+          <>
             <div style={{fontSize:12,color:'var(--muted)',marginBottom:12,textAlign:'center'}}>
               {role==='admin'?'الاسم واللقب — للمشرف فقط':'الألقاب فقط — بدون كشف الأسماء'}
             </div>
@@ -2685,7 +2712,7 @@ export default function App() {
                     u[`qrooms/${qRoom}/game/timer`]=null;
                     u[`qrooms/${qRoom}/game/lastResult`]={...atk,result:'success',hunted,
                       msg:hunted>0?`🎯 ${hunted} قميري`:'🌳 الشجرة فارغة',
-                      poisonMsg, poisonTarget:poisonMsg?atk.attackerId:null,
+                      poisonMsg, poisonTarget:'all', poisonAttacker:atk.attackerId,
                       timestamp:ts};
                     u[`qrooms/${qRoom}/game/showResult`]=true;
                     await update(ref(db),u);
@@ -2773,6 +2800,41 @@ export default function App() {
               await update(ref(db,`qrooms/${qRoom}/game`),{phase:'ended'});
               playSound('applause');notify('🏆 انتهت!','gold');
             }}>🏆 إنهاء وإعلان النتائج</button>
+
+            {/* تقرير PDF */}
+            <button className="btn bgh mt2" onClick={()=>{
+              const lines=[];
+              const add=t=>lines.push(t);
+              add('='.repeat(40));
+              add('    تقرير صيد القميري');
+              add('='.repeat(40));
+              add(`غرفة: #${qRoom}`);
+              add('');
+              add('── الترتيب النهائي ──');
+              [...qGList].sort((a,b)=>(b.totalRemaining||0)-(a.totalRemaining||0)).forEach((g,i)=>{
+                add(`${i===0?'👑':i===1?'🥈':i===2?'🥉':(i+1)+'.'} ${g.name} — ${g.totalRemaining||0} قميري`);
+              });
+              add('');
+              add('── سجل المعركة ──');
+              Object.values(qAttacks||{}).sort((a,b)=>(a.timestamp||0)-(b.timestamp||0)).forEach(a=>{
+                add(`${a.attackerName} → ${a.targetName} / ${a.tree} / ${a.weaponName} — ${a.result==='success'?`🎯 ${a.hunted}`:'❌ فشل'}${a.poisoned?' ☠️ شجرة مسمومة':''}`);
+              });
+              add('');
+              add('── تفاصيل المجموعات ──');
+              qGList.forEach(g=>{
+                add(`${g.name}: ${g.totalRemaining||0} قميري`);
+                Q_TREES.forEach(t=>{if(g.trees?.[t]>0) add(`  🌳 ${t}: ${g.trees[t]}`);});
+              });
+              add('='.repeat(40));
+              const content=lines.reduce((a,b)=>a+'\n'+b,'').slice(1);
+              const blob=new Blob([content],{type:'text/plain;charset=utf-8'});
+              const url=URL.createObjectURL(blob);
+              const a=document.createElement('a');
+              a.href=url;a.download=`تقرير-صيد-القميري-${qRoom}.txt`;
+              document.body.appendChild(a);a.click();
+              document.body.removeChild(a);URL.revokeObjectURL(url);
+              notify('✅ تم تحميل التقرير','success');
+            }}>📄 تحميل تقرير المعركة</button>
           </div>
         );
       }
@@ -2879,14 +2941,31 @@ export default function App() {
           )}
 
           {/* الهجوم الحالي */}
-          {qCurrentAttack&&<div className="card" style={{background:'rgba(230,57,80,.06)',border:'1px solid rgba(230,57,80,.2)'}}>
+          {qCurrentAttack&&<div className="card" style={{background:qCurrentAttack.targetId===qGroupId?'rgba(230,57,80,.12)':'rgba(230,57,80,.06)',border:`1.5px solid ${qCurrentAttack.targetId===qGroupId?'rgba(230,57,80,.5)':'rgba(230,57,80,.2)'}`}}>
             <div style={{fontSize:13,fontWeight:700,color:'var(--red)',marginBottom:4}}>⚔️ هجوم!</div>
             <div style={{fontSize:12}}>
               <strong style={{color:'var(--gold)'}}>{qCurrentAttack.attackerName}</strong> يهاجم <strong style={{color:'var(--red)'}}>{qCurrentAttack.targetName}</strong>
             </div>
+            {/* المجموعة المستهدفة — تنبيه + درع */}
+            {qCurrentAttack.targetId===qGroupId&&!qMyGroup?.shieldUsed&&isLeader&&(
+              <div style={{marginTop:8,padding:'10px',background:'rgba(155,89,182,.1)',border:'1.5px solid rgba(155,89,182,.4)',borderRadius:8}}>
+                <div style={{fontSize:13,fontWeight:900,color:'var(--red)',marginBottom:6}}>⚠️ أنت تتعرض للهجوم!</div>
+                <button className="btn bp bsm" onClick={async()=>{
+                  const tree = qCurrentAttack.tree;
+                  await update(ref(db,`qrooms/${qRoom}/groups/${qGroupId}`),{shield:tree,shieldUsed:true});
+                  await update(ref(db,`qrooms/${qRoom}/game`),{
+                    announcement:{msg:`🛡️ ${qMyGroup?.name} استخدمت الدرع لحماية شجرة ${tree}`,timestamp:Date.now()}
+                  });
+                  notify('🛡️ تم تفعيل الدرع','success');
+                }}>🛡️ تفعيل الدرع على شجرة {qCurrentAttack.tree}</button>
+              </div>
+            )}
+            {qCurrentAttack.targetId===qGroupId&&qMyGroup?.shieldUsed&&(
+              <div style={{marginTop:6,fontSize:11,color:'var(--muted)'}}>الدرع مستخدم مسبقاً</div>
+            )}
             {qTimer&&<div className="tbar urg" style={{marginTop:6}}>
               <div style={{fontSize:16}}>⏱️</div>
-              <div style={{flex:1}}><div className="tval urg">{qTimer.deadline>Date.now()?fmtMs(qTimer.deadline-Date.now()):'⏰'}</div></div>
+              <div style={{flex:1}}><div className="tval urg">{qCountdown!==null?(qCountdown>0?qCountdown:'⏰'):'...'}</div></div>
             </div>}
           </div>}
 
@@ -2922,24 +3001,14 @@ export default function App() {
               <div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:'var(--red)'}}>دورك — شن هجوم!</div>
               <div style={{fontSize:11,color:'var(--muted)'}}>اختر المجموعة المستهدفة ثم الشجرة والسلاح</div>
             </div>
-            {/* الدرع — مرة واحدة في اللعبة */}
-            {!qMyGroup?.shield&&!qMyGroup?.shieldUsed&&<div style={{display:'flex',gap:6,marginBottom:10}}>
-              <button className="btn bp bsm" style={{flex:1}} onClick={async()=>{
-                // اختر الشجرة
-                const tree = prompt('اختر الشجرة للحماية:\n' + Q_TREES.join('\n'));
-                if(!tree || !Q_TREES.includes(tree)){notify('اختر شجرة صحيحة','error');return;}
-                await update(ref(db,`qrooms/${qRoom}/groups/${qGroupId}`),{shield:tree,shieldUsed:true});
-                // إشعار عام — بدون ذكر الشجرة
-                await update(ref(db,`qrooms/${qRoom}/game`),{
-                  announcement:{msg:`🛡️ ${qMyGroup?.name} حموا إحدى أشجارهم`,timestamp:Date.now()}
-                });
-                notify('🛡️ تم تفعيل الدرع','success');
-              }}>🛡️ درع الحماية</button>
+            {/* أدوات القائد */}
+            {!qMyGroup?.radarUsed&&<div style={{display:'flex',gap:6,marginBottom:10}}>
               {!qMyGroup?.radarUsed&&<button className="btn bb bsm" style={{flex:1}} onClick={()=>setModal({type:'q_radar'})}>🔭 استخدام الرادار</button>}
             </div>}
-            {qMyGroup?.shield&&<div style={{fontSize:11,color:'var(--blue)',marginBottom:8,padding:'5px 10px',background:'rgba(79,163,224,.08)',borderRadius:7}}>
-              🛡️ شجرة <strong>{qMyGroup.shield}</strong> محمية هذه الجولة
-            </div>}
+            {qMyGroup?.shieldUsed
+              ?<div style={{fontSize:11,color:'var(--muted)',marginBottom:6}}>🛡️ الدرع مستخدم</div>
+              :<div style={{fontSize:11,color:'var(--green)',marginBottom:6}}>🛡️ الدرع متاح — يُفعّل عند تعرضك للهجوم</div>
+            }
             <div className="ig"><label className="lbl">المجموعة المستهدفة</label>
               <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
                 {qOtherGroups.map(g=>(
@@ -3508,10 +3577,12 @@ export default function App() {
         <div className="div">أدوات الإثارة الخاصة</div>
 
         {[
-          ['☠️','اللقب المسموم — اختر لقباً سرياً، من يهاجمه ويخطئ يخسر جولة هجوم'],
-          ['🤫','جولة الصمت — النتائج تُكشف مع الجولة التالية، والخارجون يستمرون باللعب حتى الكشف'],
-          ['🎮','هجوم بالنيابة — إذا لاعب جواله أُغلق، اضغط 🎮 بجانبه وهاجم نيابةً عنه'],
-          ['🚫','إخراج للغش — إذا رأيت تعاوناً مشبوهاً اضغط "غش" بجانب اللاعب'],
+          ['☠️','اللقب المسموم — من يهاجمه ويخطئ يُمنع من الهجوم الجولة القادمة'],
+          ['🤫','جولة الصمت — النتائج تُخفى وتُكشف مع الجولة التالية دفعة واحدة'],
+          ['⚔️','جولة مزدوجة — هجومان لكل لاعب في نفس الجولة'],
+          ['⚡','جولة الاندفاع — ثلاثة هجمات لكل لاعب'],
+          ['🎮','هجوم بالنيابة — المشرف يلعب عن متسابق بنفس شاشته تماماً'],
+          ['🚫','إخراج للغش — إذا رأيت تعاوناً مشبوهاً'],
         ].map(([icon,text],i)=>(
           <div key={i} className="rule-row">
             <div className="rule-icon">{icon}</div>
