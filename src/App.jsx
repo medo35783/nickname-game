@@ -902,12 +902,10 @@ export default function App() {
     // احسب هجمات هذا اللاعب — قراءة مباشرة من Firebase بـ ID اللاعب
     const freshSnap = await get(attacksRef(roomCode));
     const freshAttacks = freshSnap.val() || {};
-    const attackerPlayerObj = playersList.find(p=>p.nick===attackerNick||p.nick2===attackerNick);
-    const attackerPlayerId = attackerPlayerObj?.id;
+    const attackerPlayerId = attackerPlayer?.id;
     const myAttacksCount = Object.values(freshAttacks).filter(a=>{
-      // الفحص الأساسي بالـ ID، مع fallback للـ nick للتوافق مع الهجمات القديمة
       if(a.attackerPlayerId && attackerPlayerId) return a.attackerPlayerId===attackerPlayerId;
-      const nicks = attackerPlayerObj ? [attackerPlayerObj.nick, attackerPlayerObj.nick2].filter(Boolean) : [attackerNick];
+      const nicks = attackerPlayer ? [attackerPlayer.nick, attackerPlayer.nick2].filter(Boolean) : [attackerNick];
       return nicks.includes(a.attackerNick);
     }).length;
     if(myAttacksCount >= attacksPerRound){
@@ -919,7 +917,7 @@ export default function App() {
     const correct = guessedPlayer?.id === realOwner.id;
 
     // احفظ attackerPlayerId ليكون الفحص دقيقاً (لاعب واحد = هوية واحدة حتى لو عنده لقبان)
-    const actualAttackerId = attackerPlayerObj?.id || myId || null;
+    const actualAttackerId = attackerPlayer?.id || myId || null;
     // Firebase Transaction — يمنع Race Conditions والنقر المزدوج
     const attackData = {
       attackerNick,
@@ -1656,158 +1654,131 @@ export default function App() {
     /* ── ADMIN LIVE ── */
     if(gameScreen==='admin_live') return(
       <div className="scr">
-        <button className="btn bgh bsm" style={{width:'auto',marginBottom:12}} onClick={()=>setGameScreen('attack')}>← رجوع</button>
+        {/* ══ الشريط العلوي ══ */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+          <button className="btn bgh bxs" onClick={()=>setGameScreen('attack')}>← اللعبة</button>
+          <div style={{fontFamily:'Cairo',fontSize:16,fontWeight:900,color:'var(--gold)'}}>
+            الجولة {roundNum}
+          </div>
+          <button className="btn bgh bxs" onClick={()=>setGameScreen('stats')}>📊</button>
+        </div>
+
+        <div style={{display:'flex',gap:4,marginBottom:8}}>
+          <div className="sbox" style={{flex:1}}><div className="snum" style={{fontSize:16,color:'var(--green)'}}>{activePlayers.length}</div><div className="slbl">نشطون</div></div>
+          <div className="sbox" style={{flex:1}}><div className="snum" style={{fontSize:16,color:'var(--gold)'}}>{submittedCount}</div><div className="slbl">هاجموا</div></div>
+          <div className="sbox" style={{flex:1}}><div className="snum" style={{fontSize:16,color:'var(--red)'}}>{elimPlayers.length}</div><div className="slbl">خارجون</div></div>
+        </div>
 
         {/* ══ أدوات الإثارة — فوق دائماً ══ */}
-        <div className="card" style={{background:'linear-gradient(135deg,rgba(240,192,64,.06),rgba(155,89,182,.06))',border:'1px solid rgba(240,192,64,.2)',marginBottom:10}}>
-          <div className="ctitle">⚗️ أدوات الجولة القادمة</div>
-
-          {/* نوع الجولة */}
-          <div style={{marginBottom:10}}>
-            <div style={{fontSize:11,color:'var(--muted)',marginBottom:6}}>⚡ نوع الجولة</div>
-            <div style={{display:'flex',gap:5}}>
-              {[[1,'🗡️ عادية'],[2,'⚔️ مزدوجة'],[3,'⚡ اندفاع']].map(([n,label])=>(
-                <button key={n} className={`btn ${activeSpecialRound===n?'bg':'bgh'} bsm`} style={{flex:1,fontSize:11}}
-                  onClick={async()=>{setSpecialRound(n);await update(gameRef(roomCode),{specialRound:n});}}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* اللقب المسموم */}
-          <div style={{marginBottom:10}}>
-            <div style={{fontSize:11,color:'var(--purple)',marginBottom:6}}>☠️ اللقب المسموم</div>
-            <div style={{display:'flex',gap:6}}>
-              <select className="inp" style={{flex:1,fontSize:12,padding:'6px 10px'}} value={activePoisonNick}
-                onChange={async e=>{const v=e.target.value;setPoisonNick(v);await update(gameRef(roomCode),{poisonNick:v||null});}}>
-                <option value="">بدون لقب مسموم</option>
-                {playersList.filter(p=>p.status==='active').flatMap(p=>[p.nick,p.nick2].filter(Boolean)).map(n=>(
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-              {activePoisonNick&&<button className="btn bp bxs" onClick={async()=>{setPoisonNick('');await update(gameRef(roomCode),{poisonNick:null});}}>✕</button>}
-            </div>
-          </div>
-
-          {/* جولة الصمت + الكشف */}
-          <div>
-            <div style={{fontSize:11,color:'var(--blue)',marginBottom:6}}>🤫 جولة الصمت</div>
-            <div style={{display:'flex',gap:6}}>
-              <button className={`btn ${isSilentActive?'bb':'bgh'} bsm`} style={{flex:1}}
-                onClick={async()=>{const v=!isSilentActive;setSilentRound(v);await update(gameRef(roomCode),{silentActive:v});}}>
-                {isSilentActive?'🤫 مفعّلة — إلغاء':'تفعيل الصمت'}
+        <div className="card" style={{background:'linear-gradient(135deg,rgba(240,192,64,.05),rgba(155,89,182,.03))',border:'1px solid rgba(240,192,64,.15)',marginBottom:8}}>
+          <div className="ctitle" style={{fontSize:12}}>⚗️ أدوات الجولة القادمة</div>
+          <div style={{display:'flex',gap:4,marginBottom:8}}>
+            {[[1,'🗡️ عادية'],[2,'⚔️ مزدوجة'],[3,'⚡ اندفاع']].map(([n,label])=>(
+              <button key={n} className={`btn ${activeSpecialRound===n?'bg':'bgh'} bxs`} style={{flex:1,fontSize:10}}
+                onClick={async()=>{setSpecialRound(n);await update(gameRef(roomCode),{specialRound:n});}}>
+                {label}
               </button>
-              {isSilentActive&&<button className="btn bb bsm" style={{flex:1}} onClick={async()=>{
-                const currentAtks=Object.values(attacks||{});
-                const seenIds=new Set();const elimAtt={};
-                currentAtks.forEach(a=>{if(a.correct){if(!elimAtt[a.realOwnerId])elimAtt[a.realOwnerId]=[];elimAtt[a.realOwnerId].push(a.attackerNick);seenIds.add(a.realOwnerId);}});
-                const silentExits=playersList.filter(p=>seenIds.has(p.id)).map(p=>({playerId:p.id,nick:p.nick,nick2:p.nick2,name:p.name,attackers:elimAtt[p.id]||[],roundNum,initials:p.initials,colorIdx:p.colorIdx}));
-                const silentMissed=playersList.filter(p=>p.status==='active'&&!currentAtks.some(a=>a.attackerNick===p.nick)).map(p=>({playerId:p.id,missedRounds:(p.missedRounds||0)+1}));
-                const updates={};
-                updates[`rooms/${roomCode}/rounds/round_${roundNum}`]={round:roundNum,attacks:attacks||{},endedAt:Date.now(),silent:true};
-                const prev=gameState?.silentPending||{silentExits:[],silentMissed:[]};
-                updates[`rooms/${roomCode}/game/silentPending`]={silentExits:[...(prev.silentExits||[]),...silentExits],silentMissed:[...(prev.silentMissed||[]),...silentMissed],roundNum};
-                setSilentRound(false);await update(gameRef(roomCode),{silentActive:false});
-                await set(ref(db,`rooms/${roomCode}/currentRound`),{attacks:{}});
-                await update(ref(db),updates);
-                await launchRound(roundNum+1);
-                notify(`🤫 الجولة ${roundNum} مخفية — سيُكشف نتائجها مع الجولة ${roundNum+1}`,'info');
-              }}>⏭️ الجولة التالية</button>}
-            </div>
-            {gameState?.silentPending&&<button className="btn bv bsm mt2" style={{width:'100%'}} onClick={async()=>{
-              const sp=gameState.silentPending;const updates={};
-              sp.silentExits?.forEach(ex=>{const p=playersList.find(pl=>pl.nick===ex.nick||pl.id===ex.playerId);
-                if(p){updates[`rooms/${roomCode}/players/${p.id}/status`]=ex.inactive?'inactive':'eliminated';
-                  updates[`rooms/${roomCode}/players/${p.id}/eliminatedRound`]=ex.roundNum;
-                  if(!ex.inactive)updates[`rooms/${roomCode}/players/${p.id}/eliminatedBy`]=ex.attackers?.join(' + ')||'لاعب';}});
-              updates[`rooms/${roomCode}/game/silentPending`]=null;
-              updates[`rooms/${roomCode}/game/phase`]='revealing';
-              await update(ref(db),updates);playSound('suspense');
-              notify('🔓 كُشفت نتائج الجولة الصامتة!','gold');
-            }}>🔓 كشف نتائج الجولة الصامتة الآن</button>}
+            ))}
+          </div>
+          <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:6}}>
+            <span style={{fontSize:10,color:'var(--purple)',flexShrink:0}}>☠️</span>
+            <select className="inp" style={{flex:1,fontSize:11,padding:'4px 8px'}} value={activePoisonNick}
+              onChange={async e=>{const v=e.target.value;setPoisonNick(v);await update(gameRef(roomCode),{poisonNick:v||null});}}>
+              <option value="">بدون مسموم</option>
+              {playersList.filter(p=>p.status==='active').flatMap(p=>[p.nick,p.nick2].filter(Boolean)).map(n=>(
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{display:'flex',gap:6}}>
+            <button className={`btn ${isSilentActive?'bb':'bgh'} bxs`} style={{flex:1}} onClick={async()=>{
+              const v=!isSilentActive;setSilentRound(v);await update(gameRef(roomCode),{silentActive:v});
+            }}>{isSilentActive?'🤫 صمت مفعّل — إلغاء':'🔕 تفعيل الصمت'}</button>
           </div>
         </div>
 
-        {/* ══ الإحصاءات السريعة ══ */}
-        <div className="sg sg4" style={{marginBottom:8}}>
-          <div className="sbox"><div className="snum">{roundNum}</div><div className="slbl">الجولة</div></div>
-          <div className="sbox"><div className="snum" style={{color:'var(--green)'}}>{activePlayers.length}</div><div className="slbl">نشطون</div></div>
-          <div className="sbox"><div className="snum" style={{color:'var(--gold)'}}>{Object.keys(playerAttackCounts).length}</div><div className="slbl">هاجموا</div></div>
-          <div className="sbox"><div className="snum" style={{color:'var(--red)'}}>{elimPlayers.length}</div><div className="slbl">خارجون</div></div>
-        </div>
-
-        {/* العداد والوقت */}
-        <div className={`tbar${cdi.urgent?' urg':''}`}>
-          <div style={{fontSize:18}}>{cdi.urgent?'🔴':'⏱️'}</div>
-          <div style={{flex:1}}><div className={`tval${cdi.urgent?' urg':''}`}>{cdi.label}</div><div className="tlbl">متبقي — الجولة {roundNum}</div></div>
-        </div>
-
-        {/* كشف + تمديد */}
-        <div style={{display:'flex',gap:7,marginBottom:8}}>
-          {!isSilentActive&&<button className="btn bv" style={{flex:2}} onClick={doReveal}>🔓 كشف الجولة {roundNum}</button>}
-          <button className="btn bg" style={{flex:1}} onClick={()=>extendTime(30*60*1000)}>+30د</button>
-          <button className="btn bg" style={{flex:1}} onClick={()=>extendTime(60*60*1000)}>+ساعة</button>
-        </div>
-        {/* جولة الصمت — زر الانتقال */}
-        {isSilentActive&&<div className="silent-badge" style={{marginBottom:8}}>
-          <span style={{fontSize:16}}>🤫</span>
+        {/* ══ العداد والوقت ══ */}
+        <div className={`tbar${cdi.urgent?' urg':''}`} style={{marginBottom:6}}>
+          <div style={{fontSize:16}}>{cdi.urgent?'🔴':'⏱️'}</div>
           <div style={{flex:1}}>
-            <strong>جولة الصمت مفعّلة</strong>
-            <div style={{fontSize:10,marginTop:2,opacity:.8}}>النتائج مخفية</div>
+            <div className={`tval${cdi.urgent?' urg':''}`}>{cdi.label}</div>
+            <div className="tlbl">متبقي — الجولة {roundNum}</div>
           </div>
-          <button className="btn bb bxs" onClick={async()=>{
-            const currentAtks=Object.values(attacks||{});
-            const seenIds=new Set();const elimAtt={};
-            currentAtks.forEach(a=>{if(a.correct){if(!elimAtt[a.realOwnerId])elimAtt[a.realOwnerId]=[];elimAtt[a.realOwnerId].push(a.attackerNick);seenIds.add(a.realOwnerId);}});
-            const silentExits=playersList.filter(p=>seenIds.has(p.id)).map(p=>({playerId:p.id,nick:p.nick,nick2:p.nick2,name:p.name,attackers:elimAtt[p.id]||[],roundNum,initials:p.initials,colorIdx:p.colorIdx}));
-            const silentMissed=playersList.filter(p=>p.status==='active'&&!currentAtks.some(a=>a.attackerNick===p.nick)).map(p=>({playerId:p.id,missedRounds:(p.missedRounds||0)+1}));
-            const updates={};
-            updates[`rooms/${roomCode}/rounds/round_${roundNum}`]={round:roundNum,attacks:attacks||{},endedAt:Date.now(),silent:true};
-            const prev=gameState?.silentPending||{silentExits:[],silentMissed:[]};
-            updates[`rooms/${roomCode}/game/silentPending`]={silentExits:[...(prev.silentExits||[]),...silentExits],silentMissed:[...(prev.silentMissed||[]),...silentMissed],roundNum};
-            setSilentRound(false);await update(gameRef(roomCode),{silentActive:false});
-            await set(ref(db,`rooms/${roomCode}/currentRound`),{attacks:{}});
-            await update(ref(db),updates);
-            await launchRound(roundNum+1);
-            notify('🤫 انتقلنا للجولة التالية','info');
-          }}>⏭️ الجولة التالية</button>
-        </div>}
-
-        {/* كشف نتائج الجولة */}
-        {!isSilentActive&&<button className="btn bv" style={{marginBottom:8}} onClick={doReveal}>
-          🔓 كشف نتائج الجولة {roundNum}
-        </button>}
-
-        {/* فاصل واضح */}
-        <div style={{margin:'4px 0 10px',padding:'8px 12px',background:'rgba(255,255,255,.04)',borderRadius:8,fontSize:11,color:'var(--muted)',textAlign:'center',border:'1px dashed rgba(255,255,255,.1)'}}>
-          ─── الخيارات أدناه تنهي المسابقة كاملاً ───
+        </div>
+        <div style={{display:'flex',gap:4,marginBottom:8}}>
+          <button className="btn bg bxs" style={{flex:1}} onClick={()=>extendTime(5*60*1000)}>+5د</button>
+          <button className="btn bg bxs" style={{flex:1}} onClick={()=>extendTime(15*60*1000)}>+15د</button>
+          <button className="btn bg bxs" style={{flex:1}} onClick={()=>extendTime(30*60*1000)}>+30د</button>
+          <input type="number" className="inp" style={{width:55,padding:'4px',textAlign:'center',fontSize:11}} placeholder="دقائق"
+            onKeyDown={e=>{if(e.key==='Enter'){const m=parseInt(e.target.value);if(m>0){extendTime(m*60*1000);e.target.value='';}}}}/>
         </div>
 
-        {/* إنهاء المسابقة — مختلف تماماً */}
-        <button className="btn bgh" style={{marginBottom:8,border:'1px solid var(--red)',color:'var(--red)'}}
-          onClick={()=>setModal({type:'confirm_end'})}>
-          🛑 إنهاء المسابقة كاملاً
-        </button>
+        {/* ══ شريط التقدم ══ */}
+        <div className="counter-bar" style={{marginBottom:8}}>
+          <div style={{fontSize:14}}>📨</div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:12,fontWeight:700}}>
+              {submittedCount}/{activePlayers.length * attacksPerRound} هجمة
+              {attacksPerRound>1&&<span style={{fontSize:10,color:'var(--gold)',marginRight:4}}> ({attacksPerRound} لكل لاعب)</span>}
+              {allSubmitted&&<span style={{color:'var(--green)',fontSize:11}}> ✓</span>}
+            </div>
+            <div className="counter-track mt2"><div className="counter-fill" style={{width:`${(submittedCount/Math.max(activePlayers.length*attacksPerRound,1))*100}%`}}/></div>
+          </div>
+        </div>
 
-        {/* حالة الإرسال + هجوم بالنيابة */}
-        <div className="card">
-          <div className="ctitle">📋 حالة اللاعبين</div>
+        {/* ══ الزر الذكي ══ */}
+        <div style={{marginBottom:10}}>
+          {phase==='attacking'&&isSilentActive&&(
+            <button className="btn bb" onClick={async()=>{
+              const currentAtks=Object.values(attacks||{});
+              const seenIds=new Set();const elimAtt={};
+              currentAtks.forEach(a=>{if(a.correct){if(!elimAtt[a.realOwnerId])elimAtt[a.realOwnerId]=[];elimAtt[a.realOwnerId].push(a.attackerNick);seenIds.add(a.realOwnerId);}});
+              const silentExits=playersList.filter(p=>seenIds.has(p.id)).map(p=>({playerId:p.id,nick:p.nick,nick2:p.nick2,name:p.name,attackers:elimAtt[p.id]||[],roundNum,initials:p.initials,colorIdx:p.colorIdx}));
+              const silentMissed=playersList.filter(p=>p.status==='active'&&!currentAtks.some(a=>a.attackerNick===p.nick)).map(p=>({playerId:p.id,missedRounds:(p.missedRounds||0)+1}));
+              const updates={};
+              updates[`rooms/${roomCode}/rounds/round_${roundNum}`]={round:roundNum,attacks:attacks||{},endedAt:Date.now(),silent:true};
+              const prev=gameState?.silentPending||{silentExits:[],silentMissed:[]};
+              updates[`rooms/${roomCode}/game/silentPending`]={silentExits:[...(prev.silentExits||[]),...silentExits],silentMissed:[...(prev.silentMissed||[]),...silentMissed],roundNum};
+              setSilentRound(false);await update(gameRef(roomCode),{silentActive:false});
+              await set(ref(db,`rooms/${roomCode}/currentRound`),{attacks:{}});
+              await update(ref(db),updates);
+              await launchRound(roundNum+1);
+              notify(`🤫 الجولة ${roundNum} مخفية — الجولة ${roundNum+1} بدأت`,'info');
+            }}>🤫 ⏭️ الجولة التالية سراً</button>
+          )}
+          {phase==='attacking'&&!isSilentActive&&(
+            <button className="btn bv" onClick={doReveal}>🔓 كشف نتائج الجولة {roundNum}</button>
+          )}
+          {phase==='revealing'&&activePlayers.length>2&&(
+            <button className="btn bg" onClick={nextRound}>▶️ الجولة التالية ({roundNum+1})</button>
+          )}
+          {phase==='revealing'&&activePlayers.length<=2&&(
+            <button className="btn br" onClick={endGame}>🏆 إعلان الفائز</button>
+          )}
+        </div>
+
+        {/* ══ فاصل ══ */}
+        <div className="div">حالة اللاعبين</div>
+
+        {/* ══ حالة اللاعبين + هجوم بالنيابة ══ */}
+        <div className="card" style={{marginBottom:8}}>
           {activePlayers.map(p=>{
             const pNicks=[p.nick,p.nick2].filter(Boolean);
             const pDone=pNicks.reduce((s,n)=>s+(playerAttackCounts[n]||0),0);
             const allDone=pDone>=attacksPerRound;
+            const isBanned=p.isBannedNextRound&&p.isBannedNextRound>=roundNum;
             return(
-              <div key={p.id} className="pi"><Av p={p}/>
+              <div key={p.id} className="pi" style={{marginBottom:4}}>
+                <Av p={p} sz={30} fs={11}/>
                 <div className="pi-info">
-                  <div className="pi-name">{p.name} — <span style={{color:'var(--gold)'}}>{p.nick}</span></div>
-                  <div style={{fontSize:11,color:allDone?'var(--green)':pDone>0?'var(--gold)':'var(--muted)',marginTop:1}}>
-                    {allDone?'✅ أكمل':pDone>0?`⚡ ${pDone}/${attacksPerRound} هجمات`:'⏳ لم يرسل'}
-                    {p.missedRounds>0?` · ⚠️ غاب ${p.missedRounds}`:''}
+                  <div style={{fontSize:12,fontWeight:700}}>{p.name} — <span style={{color:'var(--gold)'}}>{p.nick}</span></div>
+                  <div style={{fontSize:10,color:isBanned?'var(--purple)':allDone?'var(--green)':pDone>0?'var(--gold)':'var(--muted)'}}>
+                    {isBanned?'☠️ محروم (مسموم)':allDone?`✅ أكمل ${pDone}/${attacksPerRound}`:pDone>0?`⚡ ${pDone}/${attacksPerRound}`:'⏳ لم يرسل'}
+                    {p.missedRounds>0&&!isBanned?` · ⚠️ غاب ${p.missedRounds}`:''}
                   </div>
                 </div>
-                <div style={{display:'flex',gap:4}}>
-                  {!allDone&&<button className="btn bb bxs" onClick={()=>{setProxyFor(p.id);setMyNick(null);setMyGuess(null);setMySubmitted(false);setGameScreen('attack');}}>🎮</button>}
+                <div style={{display:'flex',gap:3}}>
+                  {!allDone&&!isBanned&&<button className="btn bb bxs" onClick={()=>{setProxyFor(p.id);setMyNick(null);setMyGuess(null);setMySubmitted(false);setGameScreen('attack');}}>🎮</button>}
                   <button className="btn br bxs" onClick={()=>elimCheat(p.id)}>غش</button>
                 </div>
               </div>
@@ -1815,19 +1786,26 @@ export default function App() {
           })}
         </div>
 
-
-
-        {/* سجل سري */}
+        {/* ══ سجل الهجمات السري ══ */}
         <div className="card">
-          <div className="ctitle">🕵️ سجل الهجمات السري</div>
-          {attacksList.length===0?<div style={{textAlign:'center',color:'var(--muted)',padding:14,fontSize:12}}>لا هجمات بعد</div>:
-            <div className="sc">{attacksList.map((a,i)=>(
-              <div key={i} style={{padding:'7px 10px',marginBottom:4,background:'#09091e',borderRadius:8,borderRight:`3px solid ${a.correct?'var(--green)':'var(--red)'}`,fontSize:12}}>
-                <div style={{fontWeight:700}}>"{a.attackerNick}" ← "{a.targetNick}"</div>
-                <div style={{color:'var(--muted)',marginTop:1}}>خمّن: {a.guessedName} / الحقيقي: {a.realOwnerName} <span style={{color:a.correct?'var(--green)':'var(--red)'}}>{a.correct?'✅':'❌'}</span></div>
+          <div className="ctitle">🕵️ سجل الهجمات</div>
+          {attacksList.length===0?<div style={{textAlign:'center',color:'var(--muted)',fontSize:11,padding:10}}>لا هجمات بعد</div>:
+            <div className="sc" style={{maxHeight:180}}>{attacksList.map((a,i)=>(
+              <div key={i} style={{padding:'5px 8px',marginBottom:3,background:'#09091e',borderRadius:7,borderRight:`3px solid ${a.correct?'var(--green)':'var(--red)'}`,fontSize:11}}>
+                <span style={{fontWeight:700}}>"{a.attackerNick}"</span> → <span>"{a.targetNick}"</span>
+                <span style={{marginRight:6}}> خمّن: {a.guessedName}</span>
+                <span style={{color:a.correct?'var(--green)':'var(--red)'}}>{a.correct?'✅':'❌'}</span>
               </div>
             ))}</div>}
         </div>
+
+        {/* ══ إنهاء المسابقة ══ */}
+        <div style={{margin:'8px 0',padding:'6px 10px',background:'rgba(255,255,255,.03)',borderRadius:7,textAlign:'center',fontSize:10,color:'var(--dim)',border:'1px dashed rgba(255,255,255,.08)'}}>
+          ─── إنهاء المسابقة نهائياً ───
+        </div>
+        <button className="btn bgh" style={{border:'1px solid var(--red)',color:'var(--red)'}} onClick={()=>setModal({type:'confirm_end'})}>
+          🛑 إنهاء المسابقة كاملاً
+        </button>
       </div>
     );
 
@@ -2323,7 +2301,7 @@ export default function App() {
 
     if(gameScreen==='qumairi_lobby'){const unassigned=qMList.filter(m=>!m.groupId);const myMD=qMList.find(m=>m.id===qMyId);if(myMD&&qRole!=='admin'){if(myMD.role==='leader'&&qRole!=='leader'){setQRole('leader');qSave({qRole:'leader'});}if(myMD.groupId&&myMD.groupId!==qGroupId){setQGroupId(myMD.groupId);const grp=qGList.find(g=>g.id===myMD.groupId);if(grp)setQGroupName(grp.name);qSave({qGroupId:myMD.groupId});}}return(<div className="scr"><button className="btn bgh bsm" style={{width:'auto',marginBottom:12}} onClick={()=>{setGameScreen('home');setSelectedGame('qumairi');localStorage.removeItem('ng_qumairi');setQRoom('');setQRole(null);setQGroupId(null);}}>← رجوع</button><div className="ptitle" style={{fontSize:18}}>🦅 صيد القميري</div><div className="card" style={{textAlign:'center'}}><div style={{fontSize:12,color:'var(--muted)'}}>رمز الغرفة</div><div className="room-code-big" style={{fontSize:28}}>{qRoom}</div><button className="btn bo bxs" style={{width:'auto',margin:'6px auto 0'}} onClick={()=>{navigator.clipboard?.writeText(qRoom);notify('تم النسخ','success');}}>📋 نسخ</button></div>{isAdmin&&<><div className="card"><div className="ctitle">➕ إنشاء مجموعة</div><div style={{display:'flex',gap:6}}><input className="inp" placeholder="اسم المجموعة" value={qGroupName} onChange={e=>setQGroupName(e.target.value)} style={{flex:1}}/><button className="btn bg bsm" onClick={async()=>{if(!qGroupName.trim())return;if(qGList.length>=6)return;const initW={};Q_WEAPONS.forEach(w=>{initW[w.id]=w.qty;});const nRef=push(ref(db,`qrooms/${qRoom}/groups`));await set(nRef,{name:qGroupName.trim(),trees:{},weapons:initW,totalRemaining:Q_TOTAL,distributed:false,shieldUsed:false});setQGroupName('');notify('✅','success');}}>➕</button></div></div><div className="card"><div className="ctitle">👥 المجموعات ({qGList.length})</div>{qGList.map((g,gi)=>{const members=qMList.filter(m=>m.groupId===g.id);const leader=members.find(m=>m.role==='leader');return(<div key={g.id} style={{marginBottom:10,padding:10,background:'#09091e',borderRadius:10}}><div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}><span style={{fontWeight:900,color:'var(--gold)'}}>{g.name}</span><span style={{fontSize:10,color:'var(--muted)'}}>{members.length} عضو{leader?` · 👑 ${leader.name}`:''}</span></div>{members.map(m=>(<div key={m.id} style={{display:'flex',alignItems:'center',gap:6,padding:'4px 0',fontSize:12}}><span>{m.role==='leader'?'👑':'👤'}</span><span style={{flex:1}}>{m.name}</span>{m.role!=='leader'&&<button className="btn bg bxs" onClick={async()=>{const updates={};members.forEach(mm=>{if(mm.role==='leader')updates[`qrooms/${qRoom}/members/${mm.id}/role`]='member';});updates[`qrooms/${qRoom}/members/${m.id}/role`]='leader';await update(ref(db),updates);}}>👑</button>}</div>))}</div>)})}{unassigned.length>0&&<><div style={{fontSize:11,color:'var(--red)',fontWeight:700,marginTop:10,marginBottom:6}}>⏳ بدون مجموعة ({unassigned.length})</div>{unassigned.map(m=>(<div key={m.id} style={{display:'flex',alignItems:'center',gap:6,padding:'5px 0',fontSize:12}}><span>👤 {m.name}</span><div style={{display:'flex',gap:3}}>{qGList.map(g=>(<button key={g.id} className="btn bg bxs" style={{fontSize:9}} onClick={async()=>{await update(ref(db,`qrooms/${qRoom}/members/${m.id}`),{groupId:g.id});}}>{g.name}</button>))}</div></div>))}</>}</div>{qPhase==='lobby'&&<button className="btn bg" disabled={qGList.length<2} onClick={async()=>{await update(ref(db,`qrooms/${qRoom}/game`),{phase:'distributing'});notify('🌳 بدء التوزيع','gold');}}>🌳 بدء التوزيع</button>}{qPhase==='distributing'&&(()=>{const allDist=qGList.length>=2&&qGList.every(g=>g.distributed);return allDist?<button className="btn bg" onClick={async()=>{await update(ref(db,`qrooms/${qRoom}/game`),{phase:'playing',round:1,currentAttack:null,timer:null,turnGroup:qGList[0]?.id});notify('⚔️ اللعبة بدأت','gold');}}>⚔️ بدء اللعبة</button>:<div style={{textAlign:'center',color:'var(--muted)',fontSize:12,padding:10}}>⏳ انتظار التوزيع</div>;})()}</>}{!isAdmin&&qPhase==='distributing'&&(()=>{if(!qGroupId||!qMyGroup) return <div className="card" style={{textAlign:'center',padding:20}}><div style={{fontSize:40}}>⏳</div><div style={{fontSize:14,color:'var(--muted)',marginTop:8}}>انتظر المشرف يحدد مجموعتك</div></div>;if(qMyGroup.distributed) return <div className="card" style={{textAlign:'center',padding:20}}><div style={{fontSize:40}}>✅</div><div style={{fontSize:15,fontWeight:900,color:'var(--green)',marginTop:8}}>تم التوزيع — انتظار الباقين</div></div>;if(!isLeader) return <div className="card" style={{textAlign:'center',padding:20}}><div style={{fontSize:40}}>⏳</div><div style={{fontSize:14,color:'var(--muted)',marginTop:8}}>القائد 👑 يوزع — انتظر</div></div>;const total=Object.values(qDistribution).reduce((s,v)=>s+(parseInt(v)||0),0);const remaining=Q_TOTAL-total;return(<div className="card"><div className="ctitle">🌳 وزّع {Q_TOTAL} قميري</div><div style={{textAlign:'center',marginBottom:12}}><div style={{fontFamily:'Cairo',fontSize:32,fontWeight:900,color:remaining===0?'var(--green)':remaining<0?'var(--red)':'var(--gold)'}}>{remaining}</div><div style={{fontSize:11,color:'var(--muted)'}}>متبقي</div></div><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>{Q_TREES.map(tree=>(<div key={tree} style={{background:'#09091e',borderRadius:10,padding:'10px 8px',textAlign:'center'}}><div style={{fontSize:22}}>🌳</div><div style={{fontSize:11,fontWeight:700,marginTop:2}}>{tree}</div><input type="number" min="0" max="100" className="inp" style={{marginTop:6,padding:'6px',fontSize:16,textAlign:'center',width:'100%'}} value={qDistribution[tree]||''} placeholder="0" onChange={e=>setQDistribution(prev=>({...prev,[tree]:e.target.value}))}/></div>))}</div><button className="btn bg mt3" disabled={remaining!==0} onClick={async()=>{const trees={};Q_TREES.forEach(t=>{trees[t]=parseInt(qDistribution[t])||0;});await update(ref(db,`qrooms/${qRoom}/groups/${qGroupId}`),{trees,distributed:true,totalRemaining:Q_TOTAL});notify('✅ تم التوزيع','success');}}>{remaining===0?'✅ تأكيد':`وزّع ${Math.abs(remaining)}`}</button></div>);})()}{!isAdmin&&qPhase==='lobby'&&<div className="card" style={{textAlign:'center',padding:20}}><div style={{fontSize:40}}>⏳</div><div style={{fontSize:14,color:'var(--muted)',marginTop:8}}>{qGroupId?`مجموعتك: ${qMyGroup?.name||'—'}`:'انتظر المشرف'}</div></div>}</div>);}
 
-    if(gameScreen==='qumairi_play'){const myAtks=Object.values(qAttacks||{}).filter(a=>a.attackerId===qGroupId||a.targetId===qGroupId).sort((a,b)=>(b.timestamp||0)-(a.timestamp||0));if(isAdmin){const turnGroupId=qGameState?.turnGroup;const turnGroup=qGList.find(g=>g.id===turnGroupId);return(<div className="scr">{qReveal&&qReveal.phase==='result'&&(<div className={`q-reveal q-reveal-bg-${qReveal.type}`}><div className="q-scene">{qReveal.type==='success'&&<><div className="q-tree-big">🌳</div><div className="q-birds">{Array.from({length:Math.min(qReveal.hunted||0,20)}).map((_,i)=>(<span key={i} className="q-bird" style={{'--br':`${(Math.random()-.5)*40}deg`,animationDelay:`${i*.1}s`}}>🐦</span>))}</div><div className="q-num" style={{color:'var(--green)'}}>-{qReveal.hunted}</div><div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:'var(--gold)'}}>🎯 {qReveal.hunted} قميري</div></>}{qReveal.type==='empty'&&<><div className="q-empty-face">😂</div><div style={{fontFamily:'Cairo',fontSize:20,fontWeight:900,color:'var(--gold)',marginTop:10}}>الشجرة فاضية</div></>}{qReveal.type==='fail'&&<><div style={{fontSize:60}}>💨</div><div style={{fontFamily:'Cairo',fontSize:20,fontWeight:900,color:'var(--red)',marginTop:8}}>إجابة خاطئة</div></>}{qReveal.poisonMsg&&<div style={{marginTop:10,padding:'8px 14px',background:'rgba(155,89,182,.2)',border:'1px solid rgba(155,89,182,.5)',borderRadius:8,fontSize:13,color:'var(--purple)',fontWeight:700}}>{qReveal.poisonMsg}</div>}</div><button className="btn bg mt3" style={{width:'auto',padding:'10px 30px'}} onClick={()=>{setQReveal(null);update(ref(db,`qrooms/${qRoom}/game`),{lastResult:null,showResult:false});}}>▶️ متابعة</button></div>)}<div className="ptitle" style={{fontSize:18}}>👑 لوحة المشرف</div>{!qCurrentAttack&&!qReveal&&<div className="card"><div style={{display:'flex',gap:5,marginBottom:8}}><button className={`btn ${qGameState?.playMode!=='speed'?'bg':'bgh'} bxs`} style={{flex:1}} onClick={async()=>await update(ref(db,`qrooms/${qRoom}/game`),{playMode:'sequential'})}>📋 تسلسلي</button><button className={`btn ${qGameState?.playMode==='speed'?'bg':'bgh'} bxs`} style={{flex:1}} onClick={async()=>await update(ref(db,`qrooms/${qRoom}/game`),{playMode:'speed'})}>⚡ سرعة</button><button className={`btn ${qGameState?.playMode==='challenge'?'bb':'bgh'} bxs`} style={{flex:1}} onClick={async()=>await update(ref(db,`qrooms/${qRoom}/game`),{playMode:'challenge'})}>🏁 تحدي</button></div><div className="ctitle" style={{margin:0}}}>⚔️ من يهاجم؟</div><div style={{display:'flex',gap:5,flexWrap:'wrap'}}>{qGList.map(g=>(<button key={g.id} className={`btn ${turnGroupId===g.id?'bg':'bgh'}`} style={{flex:1,minWidth:'30%',padding:'8px'}} onClick={async()=>{await update(ref(db,`qrooms/${qRoom}/game`),{turnGroup:g.id});}}><div style={{fontSize:13,fontWeight:900}}>{g.name}</div><div style={{fontSize:9,opacity:.7}}>{g.totalRemaining} 🐦</div></button>))}</div></div>}{qCurrentAttack&&<div className="card" style={{background:'rgba(230,57,80,.08)',border:'1px solid rgba(230,57,80,.3)'}}><div className="ctitle" style={{color:'var(--red)'}}>⚔️ هجوم</div><div style={{fontSize:13,marginBottom:8}}><strong style={{color:'var(--gold)'}}>{qCurrentAttack.attackerName}</strong> → <strong style={{color:'var(--red)'}}>{qCurrentAttack.targetName}</strong> / 🌳 {qCurrentAttack.tree} / {qCurrentAttack.weaponName}</div>{!qTimer&&<><div style={{display:'flex',gap:4,marginBottom:6}}>{[15,30,45,60].map(s=>(<button key={s} className="btn bg bsm" style={{flex:1}} onClick={async()=>{await update(ref(db,`qrooms/${qRoom}/game`),{timer:{deadline:Date.now()+s*1000}});playSound('suspense');}}>{s}ث</button>))}</div><div style={{display:'flex',gap:4}}><input type="number" className="inp" style={{flex:1,padding:'5px',textAlign:'center',fontSize:13}} placeholder="مخصص" value={qCustomTimer} onChange={e=>setQCustomTimer(e.target.value)}/><button className="btn bg bsm" onClick={async()=>{const s=parseInt(qCustomTimer)||30;await update(ref(db,`qrooms/${qRoom}/game`),{timer:{deadline:Date.now()+s*1000}});setQCustomTimer('');playSound('suspense');}}>⏱️</button></div></>}{qTimer&&<><div style={{textAlign:'center',marginBottom:8}}><div className="q-timer-huge" style={{fontSize:56}}>{qCountdown!==null?(qCountdown>0?qCountdown:'⏰'):'...'}</div></div><div style={{display:'flex',gap:8}}><button className="btn bv" style={{flex:1}} onClick={async()=>{const atk=qCurrentAttack;const tg=qGList.find(g=>g.id===atk.targetId);const u={};if(tg?.shield===atk.tree){u[`qrooms/${qRoom}/groups/${atk.attackerId}/weapons/${atk.weapon}`]=(qGroups[atk.attackerId]?.weapons?.[atk.weapon]||1)-1;u[`qrooms/${qRoom}/groups/${atk.targetId}/shield`]=null;const logRef=push(ref(db,`qrooms/${qRoom}/attacks`));u[`qrooms/${qRoom}/attacks/${logRef.key}`]={...atk,result:'shielded',hunted:0,timestamp:Date.now()};u[`qrooms/${qRoom}/game/currentAttack`]=null;u[`qrooms/${qRoom}/game/timer`]=null;u[`qrooms/${qRoom}/game/lastResult`]={...atk,result:'success',hunted:0,msg:'🛡️ الدرع صد الهجوم',timestamp:Date.now()};u[`qrooms/${qRoom}/game/showResult`]=true;await update(ref(db),u);return;}const treeCount=tg?.trees?.[atk.tree]||0;const wp=Q_WEAPONS.find(w=>w.id===atk.weapon)?.power||0;const hunted=Math.min(treeCount,wp);u[`qrooms/${qRoom}/groups/${atk.targetId}/trees/${atk.tree}`]=treeCount-hunted;u[`qrooms/${qRoom}/groups/${atk.targetId}/totalRemaining`]=(tg?.totalRemaining||0)-hunted;u[`qrooms/${qRoom}/groups/${atk.attackerId}/weapons/${atk.weapon}`]=(qGroups[atk.attackerId]?.weapons?.[atk.weapon]||1)-1;let poisonMsg=null;if(qGameState?.cursedTree===atk.tree){const atkW={...(qGroups[atk.attackerId]?.weapons||{})};atkW[atk.weapon]=(atkW[atk.weapon]||0)-1;const order=['showzel','omsagma','nabeeta'];const startIdx=order.indexOf(atk.weapon);let deducted=null;for(let wi=startIdx;wi<order.length;wi++){if((atkW[order[wi]]||0)>0){u[`qrooms/${qRoom}/groups/${atk.attackerId}/weapons/${order[wi]}`]=atkW[order[wi]]-1;deducted=Q_WEAPONS.find(w=>w.id===order[wi])?.name;break;}}poisonMsg=deducted?`☠️ الشجرة المسمومة — خسرت ${deducted} إضافي`:'☠️ الشجرة المسمومة';}const ts=Date.now();const logRef=push(ref(db,`qrooms/${qRoom}/attacks`));u[`qrooms/${qRoom}/attacks/${logRef.key}`]={...atk,result:'success',hunted,timestamp:ts};u[`qrooms/${qRoom}/game/currentAttack`]=null;u[`qrooms/${qRoom}/game/timer`]=null;u[`qrooms/${qRoom}/game/lastResult`]={...atk,result:'success',hunted,msg:hunted>0?`🎯 ${hunted} قميري`:'🌳 الشجرة فارغة',poisonMsg,poisonTarget:'all',timestamp:ts};u[`qrooms/${qRoom}/game/showResult`]=true;await update(ref(db),u);playSound('explosion');}}>✅ صح</button><button className="btn br" style={{flex:1}} onClick={async()=>{const atk=qCurrentAttack;const u={};u[`qrooms/${qRoom}/groups/${atk.attackerId}/weapons/${atk.weapon}`]=(qGroups[atk.attackerId]?.weapons?.[atk.weapon]||1)-1;const logRef=push(ref(db,`qrooms/${qRoom}/attacks`));u[`qrooms/${qRoom}/attacks/${logRef.key}`]={...atk,result:'fail',hunted:0,timestamp:Date.now()};u[`qrooms/${qRoom}/game/currentAttack`]=null;u[`qrooms/${qRoom}/game/timer`]=null;u[`qrooms/${qRoom}/game/lastResult`]={...atk,result:'fail',hunted:0,msg:'❌ إجابة خاطئة',timestamp:Date.now()};u[`qrooms/${qRoom}/game/showResult`]=true;await update(ref(db),u);playSound('countdown_last');}}>❌ خطأ</button></div></>}</div>}<div className="card"><div className="ctitle">🎲 أدوات</div><div style={{marginBottom:8}}><div style={{fontSize:11,color:'var(--purple)',marginBottom:4}}>☠️ الشجرة المسمومة</div><select className="inp" style={{fontSize:12}} value={qGameState?.cursedTree||''} onChange={async e=>{await update(ref(db,`qrooms/${qRoom}/game`),{cursedTree:e.target.value||null});}}><option value="">بدون</option>{Q_TREES.map(t=><option key={t} value={t}>{t}</option>)}</select></div><div><button className={`btn ${qGameState?.sandstorm?'bb':'bgh'} bsm`} onClick={async()=>{await update(ref(db,`qrooms/${qRoom}/game`),{sandstorm:!qGameState?.sandstorm});}}>🌪️ {qGameState?.sandstorm?'إيقاف':'تفعيل'} العاصفة</button></div></div><div className="card"><div className="ctitle">📊 إحصائيات المجموعات</div>{qGList.map(g=>(<div key={g.id} style={{marginBottom:8,padding:8,background:'#09091e',borderRadius:8}}><div style={{display:'flex',justifyContent:'space-between'}}><span style={{fontWeight:700,color:'var(--gold)'}}>{g.name}</span><span style={{color:'var(--green)',fontWeight:900}}>{g.totalRemaining||0} 🐦</span></div><div style={{display:'flex',flexWrap:'wrap',gap:3,marginTop:4}}>{Q_TREES.map(t=><span key={t} style={{fontSize:9,padding:'1px 4px',borderRadius:4,background:g.trees?.[t]>0?'rgba(46,204,113,.1)':'rgba(255,255,255,.03)',color:g.trees?.[t]>0?'var(--green)':'var(--dim)'}}>{t}:{g.trees?.[t]||0}</span>)}</div></div>))}</div><div className="card"><div className="ctitle">📜 سجل المعركة</div><div className="sc" style={{maxHeight:200}}>{Object.values(qAttacks||{}).sort((a,b)=>(b.timestamp||0)-(a.timestamp||0)).map((a,i)=>(<div key={i} className="feed-item" style={{borderColor:a.result==='success'?'var(--green)':'var(--red)',fontSize:11}}><strong style={{color:'var(--gold)'}}>{a.attackerName}</strong> → <strong style={{color:'var(--red)'}}>{a.targetName}</strong> / {a.tree} — {a.result==='success'?`🎯 ${a.hunted}`:'❌ فشل'}</div>))}</div></div><button className="btn br mt2" onClick={async()=>{await update(ref(db,`qrooms/${qRoom}/game`),{phase:'ended'});playSound('applause');}}>🏆 إنهاء</button></div>);}return(<div className="scr">{qReveal&&(<div className={`q-reveal ${qReveal.phase==='result'?`q-reveal-bg-${qReveal.type}`:'q-reveal-bg-pending'}`}><div className="q-scene">{qReveal.phase==='suspense'&&<><div className="q-tree-big">🌳</div><div style={{fontFamily:'Cairo',fontSize:16,color:'var(--gold)',marginTop:10}}>شجرة {qReveal.tree}</div><div className="q-suspense" style={{fontFamily:'Cairo',fontSize:18,color:'var(--muted)',marginTop:20}}>... حبس الأنفاس ...</div></>}{qReveal.phase==='weapon'&&<><div className="q-shake"><div className="q-tree-big">🌳</div></div><div className="q-weapon-flash" style={{fontSize:40,marginTop:12}}>{qReveal.weapon==='شوزل'?'💥':qReveal.weapon==='أم صتمة'?'🎯':'🪃'}</div></>}{qReveal.phase==='result'&&qReveal.type==='success'&&<><div className="q-tree-big">🌳</div><div className="q-birds">{Array.from({length:Math.min(qReveal.hunted||0,30)}).map((_,i)=>(<span key={i} className="q-bird" style={{'--br':`${(Math.random()-.5)*40}deg`,animationDelay:`${i*.1}s`}}>🐦</span>))}</div><div className="q-num" style={{color:'var(--green)'}}>-{qReveal.hunted}</div><div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:'var(--gold)'}}>تم اصطياد {qReveal.hunted} قميري</div><div style={{marginTop:8,padding:'8px 14px',background:'rgba(255,255,255,.05)',borderRadius:8,fontSize:12}}><div style={{color:'var(--gold)'}}>{qReveal.attackerName} → {qReveal.targetName}</div></div>{qReveal.poisonMsg&&<div style={{marginTop:8,padding:'8px 14px',background:'rgba(155,89,182,.2)',border:'1px solid rgba(155,89,182,.5)',borderRadius:8,fontSize:13,color:'var(--purple)',fontWeight:700}}>{qReveal.poisonMsg}</div>}</>}{qReveal.phase==='result'&&qReveal.type==='empty'&&<><div className="q-empty-face">😂</div><div style={{fontFamily:'Cairo',fontSize:22,fontWeight:900,color:'var(--gold)',marginTop:12}}>الشجرة فاضية</div></>}{qReveal.phase==='result'&&qReveal.type==='fail'&&<><div style={{fontSize:60}}>💨</div><div style={{fontFamily:'Cairo',fontSize:22,fontWeight:900,color:'var(--red)',marginTop:8}}>إجابة خاطئة</div></>}</div></div>)}{qTurnOverlay&&!qReveal&&qCurrentAttack&&!qTimer&&(<div className="q-turn-overlay"><div style={{fontSize:70,animation:'treeBounce 1s ease infinite'}}>⚔️</div><div style={{fontFamily:'Cairo',fontSize:24,fontWeight:900,color:'var(--gold)',marginTop:12}}>{qTurnOverlay.groupName}</div><div style={{fontSize:14,color:'var(--muted)',marginTop:6}}>اختاروا هدفهم بسلاح {qTurnOverlay.weapon}</div></div>)}{qTimer&&!qReveal&&qCountdown!==null&&(<div className="q-turn-overlay"><div className="q-timer-huge">{qCountdown>0?qCountdown:'⏰'}</div><div style={{fontSize:14,color:'var(--gold)',marginTop:8}}>{qCurrentAttack?.attackerName} يهاجم {qCurrentAttack?.targetName}</div></div>)}<div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}><div style={{fontSize:15,fontWeight:900,color:'var(--gold)'}}>{qMyGroup?.name||'—'} {isLeader?'👑':''}</div><div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:'var(--green)'}}>{qMyGroup?.totalRemaining||0} 🐦</div></div>{qGameState?.announcement&&(Date.now()-qGameState.announcement.timestamp<10000)&&(<div className="ann ag" style={{marginBottom:8}}><div style={{fontSize:13,fontWeight:700}}>{qGameState.announcement.msg}</div></div>)}{qCurrentAttack&&<div className="card" style={{background:qCurrentAttack.targetId===qGroupId?'rgba(230,57,80,.12)':'rgba(230,57,80,.06)',border:`1.5px solid ${qCurrentAttack.targetId===qGroupId?'rgba(230,57,80,.5)':'rgba(230,57,80,.2)'}`}}><div style={{fontSize:13,fontWeight:700,color:'var(--red)',marginBottom:4}}>⚔️ هجوم</div><div style={{fontSize:12}}><strong style={{color:'var(--gold)'}}>{qCurrentAttack.attackerName}</strong> يهاجم <strong style={{color:'var(--red)'}}>{qCurrentAttack.targetName}</strong></div>{qCurrentAttack.targetId===qGroupId&&!qMyGroup?.shieldUsed&&isLeader&&(<div style={{marginTop:8,padding:'10px',background:'rgba(155,89,182,.1)',border:'1.5px solid rgba(155,89,182,.4)',borderRadius:8}}><div style={{fontSize:13,fontWeight:900,color:'var(--red)',marginBottom:6}}>⚠️ أنت تتعرض للهجوم</div><button className="btn bp bsm" onClick={async()=>{const tree=qCurrentAttack.tree;await update(ref(db,`qrooms/${qRoom}/groups/${qGroupId}`),{shield:tree,shieldUsed:true});await update(ref(db,`qrooms/${qRoom}/game`),{announcement:{msg:`🛡️ ${qMyGroup?.name} استخدمت الدرع`,timestamp:Date.now()}});notify('🛡️ درع','success');}}>🛡️ تفعيل الدرع</button></div>)}</div>}<div className="card"><div className="ctitle">🔫 الأسلحة</div><div style={{display:'flex',gap:6}}>{Q_WEAPONS.map(w=>(<div key={w.id} style={{flex:1,textAlign:'center',padding:8,background:'#09091e',borderRadius:8}}><div style={{fontSize:18}}>{w.icon}</div><div style={{fontSize:10,fontWeight:700}}>{w.name}</div><div style={{fontFamily:'Cairo',fontSize:16,fontWeight:900,color:qMyGroup?.weapons?.[w.id]>0?'var(--gold)':'var(--red)'}}>{qMyGroup?.weapons?.[w.id]||0}</div></div>))}</div></div>{isLeader&&!qCurrentAttack&&qGameState?.turnGroup===qGroupId&&<div className="card" style={{background:'linear-gradient(135deg,rgba(230,57,80,.08),rgba(200,40,60,.04))',border:'1.5px solid rgba(230,57,80,.3)'}}><div style={{textAlign:'center',marginBottom:10}}><div style={{fontSize:36}}>⚔️</div><div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:'var(--red)'}}>دورك — شن هجوم</div></div><div className="ig"><label className="lbl">المجموعة</label><div style={{display:'flex',gap:4,flexWrap:'wrap'}}>{qOtherGroups.map(g=>(<button key={g.id} className={`btn ${qAttackTarget.group===g.id?'bg':'bgh'} bsm`} onClick={()=>setQAttackTarget(p=>({...p,group:g.id,groupName:g.name}))}>{g.name}</button>))}</div></div>{qAttackTarget.group&&!qGameState?.sandstorm&&<div className="ig"><label className="lbl">الشجرة</label><div style={{display:'flex',gap:3,flexWrap:'wrap'}}>{Q_TREES.map(t=>(<button key={t} className={`btn ${qAttackTarget.tree===t?'bg':'bgh'} bxs`} onClick={()=>setQAttackTarget(p=>({...p,tree:t}))}>{t}</button>))}</div></div>}{qAttackTarget.group&&qGameState?.sandstorm&&<div style={{padding:8,background:'rgba(240,192,64,.08)',borderRadius:8,marginBottom:6,fontSize:12,color:'var(--gold)'}}>🌪️ العاصفة — الشجرة عشوائية</div>}{qAttackTarget.group&&<div className="ig"><label className="lbl">السلاح</label><div style={{display:'flex',gap:5}}>{Q_WEAPONS.filter(w=>(qMyGroup?.weapons?.[w.id]||0)>0).map(w=>(<button key={w.id} className={`btn ${qAttackTarget.weapon===w.id?'bg':'bgh'} bsm`} style={{flex:1}} onClick={()=>setQAttackTarget(p=>({...p,weapon:w.id,weaponName:w.name}))}>{w.icon} {w.name}</button>))}</div></div>}{qAttackTarget.group&&qAttackTarget.weapon&&(qAttackTarget.tree||qGameState?.sandstorm)&&(<button className="btn br mt2" onClick={async()=>{const finalTree=qGameState?.sandstorm?Q_TREES[Math.floor(Math.random()*Q_TREES.length)]:qAttackTarget.tree;await update(ref(db,`qrooms/${qRoom}/game`),{currentAttack:{attackerId:qGroupId,attackerName:qMyGroup?.name,targetId:qAttackTarget.group,targetName:qAttackTarget.groupName,tree:finalTree,weapon:qAttackTarget.weapon,weaponName:qAttackTarget.weaponName,time:Date.now()}});setQAttackTarget({group:'',tree:'',weapon:''});notify('⚔️ هجوم','gold');}}>⚔️ هاجم</button>)}</div>}{isLeader&&!qCurrentAttack&&qGameState?.turnGroup!==qGroupId&&!qReveal&&(<div className="card" style={{textAlign:'center',padding:14}}><div style={{fontSize:36}}>⏳</div><div style={{fontSize:14,color:'var(--muted)',marginTop:6}}>ليس دورك — انتظر</div></div>)}<div className="card"><div className="ctitle">📋 سجل مجموعتي</div>{myAtks.length===0?<div style={{textAlign:'center',color:'var(--muted)',fontSize:12,padding:8}}>لا أحداث</div>:myAtks.slice(0,15).map((a,i)=>(<div key={i} className="feed-item" style={{borderColor:a.attackerId===qGroupId?(a.result==='success'?'var(--green)':'var(--red)'):'var(--red)'}}>{a.attackerId===qGroupId?`${a.result==='success'?'🎯':'❌'} هاجمت ${a.targetName} / ${a.tree} — ${a.result==='success'?`اصطدت ${a.hunted}`:'فشل'}`:`🛡️ هاجمتكم ${a.attackerName} وخسرتم ${a.hunted} قميري`}</div>))}</div></div>);}
+    if(gameScreen==='qumairi_play'){const myAtks=Object.values(qAttacks||{}).filter(a=>a.attackerId===qGroupId||a.targetId===qGroupId).sort((a,b)=>(b.timestamp||0)-(a.timestamp||0));if(isAdmin){const turnGroupId=qGameState?.turnGroup;const turnGroup=qGList.find(g=>g.id===turnGroupId);return(<div className="scr">{qReveal&&qReveal.phase==='result'&&(<div className={`q-reveal q-reveal-bg-${qReveal.type}`}><div className="q-scene">{qReveal.type==='success'&&<><div className="q-tree-big">🌳</div><div className="q-birds">{Array.from({length:Math.min(qReveal.hunted||0,20)}).map((_,i)=>(<span key={i} className="q-bird" style={{'--br':`${(Math.random()-.5)*40}deg`,animationDelay:`${i*.1}s`}}>🐦</span>))}</div><div className="q-num" style={{color:'var(--green)'}}>-{qReveal.hunted}</div><div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:'var(--gold)'}}>🎯 {qReveal.hunted} قميري</div></>}{qReveal.type==='empty'&&<><div className="q-empty-face">😂</div><div style={{fontFamily:'Cairo',fontSize:20,fontWeight:900,color:'var(--gold)',marginTop:10}}>الشجرة فاضية</div></>}{qReveal.type==='fail'&&<><div style={{fontSize:60}}>💨</div><div style={{fontFamily:'Cairo',fontSize:20,fontWeight:900,color:'var(--red)',marginTop:8}}>إجابة خاطئة</div></>}{qReveal.poisonMsg&&<div style={{marginTop:10,padding:'8px 14px',background:'rgba(155,89,182,.2)',border:'1px solid rgba(155,89,182,.5)',borderRadius:8,fontSize:13,color:'var(--purple)',fontWeight:700}}>{qReveal.poisonMsg}</div>}</div><button className="btn bg mt3" style={{width:'auto',padding:'10px 30px'}} onClick={()=>{setQReveal(null);update(ref(db,`qrooms/${qRoom}/game`),{lastResult:null,showResult:false});}}>▶️ متابعة</button></div>)}<div className="ptitle" style={{fontSize:18}}>👑 لوحة المشرف</div>{!qCurrentAttack&&!qReveal&&<div className="card"><div style={{display:'flex',gap:5,marginBottom:8}}><button className={`btn ${qGameState?.playMode!=='speed'?'bg':'bgh'} bxs`} style={{flex:1}} onClick={async()=>await update(ref(db,`qrooms/${qRoom}/game`),{playMode:'sequential'})}>📋 تسلسلي</button><button className={`btn ${qGameState?.playMode==='speed'?'bg':'bgh'} bxs`} style={{flex:1}} onClick={async()=>await update(ref(db,`qrooms/${qRoom}/game`),{playMode:'speed'})}>⚡ سرعة</button><button className={`btn ${qGameState?.playMode==='challenge'?'bb':'bgh'} bxs`} style={{flex:1}} onClick={async()=>await update(ref(db,`qrooms/${qRoom}/game`),{playMode:'challenge'})}>🏁 تحدي</button></div><div className="ctitle" style={{margin:0}}}>⚔️ من يهاجم؟</div><div style={{display:'flex',gap:5,flexWrap:'wrap'}}>{qGList.map(g=>(<button key={g.id} className={`btn ${turnGroupId===g.id?'bg':'bgh'}`} style={{flex:1,minWidth:'30%',padding:'8px'}} onClick={async()=>{await update(ref(db,`qrooms/${qRoom}/game`),{turnGroup:g.id});}}><div style={{fontSize:13,fontWeight:900}}>{g.name}</div><div style={{fontSize:9,opacity:.7}}>{g.totalRemaining} 🐦</div></button>))}</div></div>}{qCurrentAttack&&<div className="card" style={{background:'rgba(230,57,80,.08)',border:'1px solid rgba(230,57,80,.3)'}}><div className="ctitle" style={{color:'var(--red)'}}>⚔️ هجوم</div><div style={{fontSize:13,marginBottom:8}}><strong style={{color:'var(--gold)'}}>{qCurrentAttack.attackerName}</strong> → <strong style={{color:'var(--red)'}}>{qCurrentAttack.targetName}</strong> / 🌳 {qCurrentAttack.tree} / {qCurrentAttack.weaponName}</div>{!qTimer&&<><div style={{display:'flex',gap:4,marginBottom:6}}>{[15,30,45,60].map(s=>(<button key={s} className="btn bg bsm" style={{flex:1}} onClick={async()=>{await update(ref(db,`qrooms/${qRoom}/game`),{timer:{deadline:Date.now()+s*1000}});playSound('suspense');}}>{s}ث</button>))}</div><div style={{display:'flex',gap:4}}><input type="number" className="inp" style={{flex:1,padding:'5px',textAlign:'center',fontSize:13}} placeholder="مخصص" value={qCustomTimer} onChange={e=>setQCustomTimer(e.target.value)}/><button className="btn bg bsm" onClick={async()=>{const s=parseInt(qCustomTimer)||30;await update(ref(db,`qrooms/${qRoom}/game`),{timer:{deadline:Date.now()+s*1000}});setQCustomTimer('');playSound('suspense');}}>⏱️</button></div></>}{qTimer&&<><div style={{textAlign:'center',marginBottom:8}}><div className="q-timer-huge" style={{fontSize:56}}>{qCountdown!==null?(qCountdown>0?qCountdown:'⏰'):'...'}</div></div><div style={{display:'flex',gap:8}}><button className="btn bv" style={{flex:1}} onClick={async()=>{const atk=qCurrentAttack;const tg=qGList.find(g=>g.id===atk.targetId);const u={};if(tg?.shield===atk.tree){u[`qrooms/${qRoom}/groups/${atk.attackerId}/weapons/${atk.weapon}`]=(qGroups[atk.attackerId]?.weapons?.[atk.weapon]||1)-1;u[`qrooms/${qRoom}/groups/${atk.targetId}/shield`]=null;const logRef=push(ref(db,`qrooms/${qRoom}/attacks`));u[`qrooms/${qRoom}/attacks/${logRef.key}`]={...atk,result:'shielded',hunted:0,timestamp:Date.now()};u[`qrooms/${qRoom}/game/currentAttack`]=null;u[`qrooms/${qRoom}/game/timer`]=null;u[`qrooms/${qRoom}/game/lastResult`]={...atk,result:'success',hunted:0,msg:'🛡️ الدرع صد الهجوم',timestamp:Date.now()};u[`qrooms/${qRoom}/game/showResult`]=true;await update(ref(db),u);return;}const treeCount=tg?.trees?.[atk.tree]||0;const wp=Q_WEAPONS.find(w=>w.id===atk.weapon)?.power||0;const hunted=Math.min(treeCount,wp);u[`qrooms/${qRoom}/groups/${atk.targetId}/trees/${atk.tree}`]=treeCount-hunted;u[`qrooms/${qRoom}/groups/${atk.targetId}/totalRemaining`]=(tg?.totalRemaining||0)-hunted;u[`qrooms/${qRoom}/groups/${atk.attackerId}/weapons/${atk.weapon}`]=(qGroups[atk.attackerId]?.weapons?.[atk.weapon]||1)-1;let poisonMsg=null;if(qGameState?.cursedTree===atk.tree){const atkW={...(qGroups[atk.attackerId]?.weapons||{})};atkW[atk.weapon]=(atkW[atk.weapon]||0)-1;const order=['showzel','omsagma','nabeeta'];const startIdx=order.indexOf(atk.weapon);let deducted=null;for(let wi=startIdx;wi<order.length;wi++){if((atkW[order[wi]]||0)>0){u[`qrooms/${qRoom}/groups/${atk.attackerId}/weapons/${order[wi]}`]=atkW[order[wi]]-1;deducted=Q_WEAPONS.find(w=>w.id===order[wi])?.name;break;}}poisonMsg=deducted?`☠️ الشجرة المسمومة — خسرت ${deducted} إضافي`:'☠️ الشجرة المسمومة';}const ts=Date.now();const logRef=push(ref(db,`qrooms/${qRoom}/attacks`));u[`qrooms/${qRoom}/attacks/${logRef.key}`]={...atk,result:'success',hunted,timestamp:ts};u[`qrooms/${qRoom}/game/currentAttack`]=null;u[`qrooms/${qRoom}/game/timer`]=null;u[`qrooms/${qRoom}/game/lastResult`]={...atk,result:'success',hunted,msg:hunted>0?`🎯 ${hunted} قميري`:'🌳 الشجرة فارغة',poisonMsg,poisonTarget:'all',timestamp:ts};u[`qrooms/${qRoom}/game/showResult`]=true;await update(ref(db),u);playSound('explosion');}}>✅ صح</button><button className="btn br" style={{flex:1}} onClick={async()=>{const atk=qCurrentAttack;const u={};u[`qrooms/${qRoom}/groups/${atk.attackerId}/weapons/${atk.weapon}`]=(qGroups[atk.attackerId]?.weapons?.[atk.weapon]||1)-1;const logRef=push(ref(db,`qrooms/${qRoom}/attacks`));u[`qrooms/${qRoom}/attacks/${logRef.key}`]={...atk,result:'fail',hunted:0,timestamp:Date.now()};u[`qrooms/${qRoom}/game/currentAttack`]=null;u[`qrooms/${qRoom}/game/timer`]=null;u[`qrooms/${qRoom}/game/lastResult`]={...atk,result:'fail',hunted:0,msg:'❌ إجابة خاطئة',timestamp:Date.now()};u[`qrooms/${qRoom}/game/showResult`]=true;await update(ref(db),u);playSound('countdown_last');}}>❌ خطأ</button></div></>}</div>}<div className="card"><div className="ctitle">🎲 أدوات</div><div style={{marginBottom:8}}><div style={{fontSize:11,color:'var(--purple)',marginBottom:4}}>☠️ الشجرة المسمومة</div><select className="inp" style={{fontSize:12}} value={qGameState?.cursedTree||''} onChange={async e=>{await update(ref(db,`qrooms/${qRoom}/game`),{cursedTree:e.target.value||null});}}><option value="">بدون</option>{Q_TREES.map(t=><option key={t} value={t}>{t}</option>)}</select></div><div><button className={`btn ${qGameState?.sandstorm?'bb':'bgh'} bsm`} onClick={async()=>{await update(ref(db,`qrooms/${qRoom}/game`),{sandstorm:!qGameState?.sandstorm});}}>🌪️ {qGameState?.sandstorm?'إيقاف':'تفعيل'} العاصفة</button></div></div><div className="card"><div className="ctitle">📊 إحصائيات المجموعات</div>{qGList.map(g=>(<div key={g.id} style={{marginBottom:8,padding:8,background:'#09091e',borderRadius:8}}><div style={{display:'flex',justifyContent:'space-between'}}><span style={{fontWeight:700,color:'var(--gold)'}}>{g.name}</span><span style={{color:'var(--green)',fontWeight:900}}>{g.totalRemaining||0} 🐦</span></div><div style={{display:'flex',flexWrap:'wrap',gap:3,marginTop:4}}>{Q_TREES.map(t=><span key={t} style={{fontSize:9,padding:'1px 4px',borderRadius:4,background:g.trees?.[t]>0?'rgba(46,204,113,.1)':'rgba(255,255,255,.03)',color:g.trees?.[t]>0?'var(--green)':'var(--dim)'}}>{t}:{g.trees?.[t]||0}</span>)}</div></div>))}</div><div className="card"><div className="ctitle">📜 سجل المعركة</div><div className="sc" style={{maxHeight:200}}>{Object.values(qAttacks||{}).sort((a,b)=>(b.timestamp||0)-(a.timestamp||0)).map((a,i)=>(<div key={i} className="feed-item" style={{borderColor:a.result==='success'?'var(--green)':'var(--red)',fontSize:11}}><strong style={{color:'var(--gold)'}}>{a.attackerName}</strong> → <strong style={{color:'var(--red)'}}>{a.targetName}</strong> / {a.tree} — {a.result==='success'?`🎯 ${a.hunted}`:'❌ فشل'}</div>))}</div></div><button className="btn br mt2" onClick={async()=>{await update(ref(db,`qrooms/${qRoom}/game`),{phase:'ended'});playSound('applause');}}>🏆 إنهاء</button><button className="btn bgh mt2" onClick={()=>{const lines=[];const add=t=>lines.push(t);add('='.repeat(40));add('    تقرير صيد القميري');add('='.repeat(40));add('غرفة: #'+qRoom);add('');[...qGList].sort((a,b)=>(b.totalRemaining||0)-(a.totalRemaining||0)).forEach((g,i)=>{add((i===0?'👑':(i+1)+'.')+' '+g.name+' — '+(g.totalRemaining||0)+' قميري');});add('');Object.values(qAttacks||{}).sort((a,b)=>(a.timestamp||0)-(b.timestamp||0)).forEach(a=>{add(a.attackerName+' → '+a.targetName+' / '+a.tree+' — '+(a.result==='success'?a.hunted+' 🎯':'❌'));});const content=lines.reduce((a,b)=>a+'\n'+b,'').slice(1);const blob=new Blob([content],{type:'text/plain;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='تقرير-القميري-'+qRoom+'.txt';document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);notify('✅ تم','success');}}>📄 تقرير</button></div>);}return(<div className="scr">{qReveal&&(<div className={`q-reveal ${qReveal.phase==='result'?`q-reveal-bg-${qReveal.type}`:'q-reveal-bg-pending'}`}><div className="q-scene">{qReveal.phase==='suspense'&&<><div className="q-tree-big">🌳</div><div style={{fontFamily:'Cairo',fontSize:16,color:'var(--gold)',marginTop:10}}>شجرة {qReveal.tree}</div><div className="q-suspense" style={{fontFamily:'Cairo',fontSize:18,color:'var(--muted)',marginTop:20}}>... حبس الأنفاس ...</div></>}{qReveal.phase==='weapon'&&<><div className="q-shake"><div className="q-tree-big">🌳</div></div><div className="q-weapon-flash" style={{fontSize:40,marginTop:12}}>{qReveal.weapon==='شوزل'?'💥':qReveal.weapon==='أم صتمة'?'🎯':'🪃'}</div></>}{qReveal.phase==='result'&&qReveal.type==='success'&&<><div className="q-tree-big">🌳</div><div className="q-birds">{Array.from({length:Math.min(qReveal.hunted||0,30)}).map((_,i)=>(<span key={i} className="q-bird" style={{'--br':`${(Math.random()-.5)*40}deg`,animationDelay:`${i*.1}s`}}>🐦</span>))}</div><div className="q-num" style={{color:'var(--green)'}}>-{qReveal.hunted}</div><div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:'var(--gold)'}}>تم اصطياد {qReveal.hunted} قميري</div><div style={{marginTop:8,padding:'8px 14px',background:'rgba(255,255,255,.05)',borderRadius:8,fontSize:12}}><div style={{color:'var(--gold)'}}>{qReveal.attackerName} → {qReveal.targetName}</div></div>{qReveal.poisonMsg&&<div style={{marginTop:8,padding:'8px 14px',background:'rgba(155,89,182,.2)',border:'1px solid rgba(155,89,182,.5)',borderRadius:8,fontSize:13,color:'var(--purple)',fontWeight:700}}>{qReveal.poisonMsg}</div>}</>}{qReveal.phase==='result'&&qReveal.type==='empty'&&<><div className="q-empty-face">😂</div><div style={{fontFamily:'Cairo',fontSize:22,fontWeight:900,color:'var(--gold)',marginTop:12}}>الشجرة فاضية</div></>}{qReveal.phase==='result'&&qReveal.type==='fail'&&<><div style={{fontSize:60}}>💨</div><div style={{fontFamily:'Cairo',fontSize:22,fontWeight:900,color:'var(--red)',marginTop:8}}>إجابة خاطئة</div></>}</div></div>)}{qTurnOverlay&&!qReveal&&qCurrentAttack&&!qTimer&&(<div className="q-turn-overlay"><div style={{fontSize:70,animation:'treeBounce 1s ease infinite'}}>⚔️</div><div style={{fontFamily:'Cairo',fontSize:24,fontWeight:900,color:'var(--gold)',marginTop:12}}>{qTurnOverlay.groupName}</div><div style={{fontSize:14,color:'var(--muted)',marginTop:6}}>اختاروا هدفهم بسلاح {qTurnOverlay.weapon}</div></div>)}{qTimer&&!qReveal&&qCountdown!==null&&(<div className="q-turn-overlay"><div className="q-timer-huge">{qCountdown>0?qCountdown:'⏰'}</div><div style={{fontSize:14,color:'var(--gold)',marginTop:8}}>{qCurrentAttack?.attackerName} يهاجم {qCurrentAttack?.targetName}</div></div>)}<div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}><div style={{fontSize:15,fontWeight:900,color:'var(--gold)'}}>{qMyGroup?.name||'—'} {isLeader?'👑':''}</div><div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:'var(--green)'}}>{qMyGroup?.totalRemaining||0} 🐦</div></div>{qGameState?.announcement&&(Date.now()-qGameState.announcement.timestamp<10000)&&(<div className="ann ag" style={{marginBottom:8}}><div style={{fontSize:13,fontWeight:700}}>{qGameState.announcement.msg}</div></div>)}{qCurrentAttack&&<div className="card" style={{background:qCurrentAttack.targetId===qGroupId?'rgba(230,57,80,.12)':'rgba(230,57,80,.06)',border:`1.5px solid ${qCurrentAttack.targetId===qGroupId?'rgba(230,57,80,.5)':'rgba(230,57,80,.2)'}`}}><div style={{fontSize:13,fontWeight:700,color:'var(--red)',marginBottom:4}}>⚔️ هجوم</div><div style={{fontSize:12}}><strong style={{color:'var(--gold)'}}>{qCurrentAttack.attackerName}</strong> يهاجم <strong style={{color:'var(--red)'}}>{qCurrentAttack.targetName}</strong></div>{qCurrentAttack.targetId===qGroupId&&!qMyGroup?.shieldUsed&&isLeader&&(<div style={{marginTop:8,padding:'10px',background:'rgba(155,89,182,.1)',border:'1.5px solid rgba(155,89,182,.4)',borderRadius:8}}><div style={{fontSize:13,fontWeight:900,color:'var(--red)',marginBottom:6}}>⚠️ أنت تتعرض للهجوم</div><button className="btn bp bsm" onClick={async()=>{const tree=qCurrentAttack.tree;await update(ref(db,`qrooms/${qRoom}/groups/${qGroupId}`),{shield:tree,shieldUsed:true});await update(ref(db,`qrooms/${qRoom}/game`),{announcement:{msg:`🛡️ ${qMyGroup?.name} استخدمت الدرع`,timestamp:Date.now()}});notify('🛡️ درع','success');}}>🛡️ تفعيل الدرع</button></div>)}</div>}<div className="card"><div className="ctitle">🔫 الأسلحة</div><div style={{display:'flex',gap:6}}>{Q_WEAPONS.map(w=>(<div key={w.id} style={{flex:1,textAlign:'center',padding:8,background:'#09091e',borderRadius:8}}><div style={{fontSize:18}}>{w.icon}</div><div style={{fontSize:10,fontWeight:700}}>{w.name}</div><div style={{fontFamily:'Cairo',fontSize:16,fontWeight:900,color:qMyGroup?.weapons?.[w.id]>0?'var(--gold)':'var(--red)'}}>{qMyGroup?.weapons?.[w.id]||0}</div></div>))}</div></div>{isLeader&&!qCurrentAttack&&qGameState?.turnGroup===qGroupId&&<div className="card" style={{background:'linear-gradient(135deg,rgba(230,57,80,.08),rgba(200,40,60,.04))',border:'1.5px solid rgba(230,57,80,.3)'}}><div style={{textAlign:'center',marginBottom:10}}><div style={{fontSize:36}}>⚔️</div><div style={{fontFamily:'Cairo',fontSize:18,fontWeight:900,color:'var(--red)'}}>دورك — شن هجوم</div></div><div className="ig"><label className="lbl">المجموعة</label><div style={{display:'flex',gap:4,flexWrap:'wrap'}}>{qOtherGroups.map(g=>(<button key={g.id} className={`btn ${qAttackTarget.group===g.id?'bg':'bgh'} bsm`} onClick={()=>setQAttackTarget(p=>({...p,group:g.id,groupName:g.name}))}>{g.name}</button>))}</div></div>{qAttackTarget.group&&!qGameState?.sandstorm&&<div className="ig"><label className="lbl">الشجرة</label><div style={{display:'flex',gap:3,flexWrap:'wrap'}}>{Q_TREES.map(t=>(<button key={t} className={`btn ${qAttackTarget.tree===t?'bg':'bgh'} bxs`} onClick={()=>setQAttackTarget(p=>({...p,tree:t}))}>{t}</button>))}</div></div>}{qAttackTarget.group&&qGameState?.sandstorm&&<div style={{padding:8,background:'rgba(240,192,64,.08)',borderRadius:8,marginBottom:6,fontSize:12,color:'var(--gold)'}}>🌪️ العاصفة — الشجرة عشوائية</div>}{qAttackTarget.group&&<div className="ig"><label className="lbl">السلاح</label><div style={{display:'flex',gap:5}}>{Q_WEAPONS.filter(w=>(qMyGroup?.weapons?.[w.id]||0)>0).map(w=>(<button key={w.id} className={`btn ${qAttackTarget.weapon===w.id?'bg':'bgh'} bsm`} style={{flex:1}} onClick={()=>setQAttackTarget(p=>({...p,weapon:w.id,weaponName:w.name}))}>{w.icon} {w.name}</button>))}</div></div>}{qAttackTarget.group&&qAttackTarget.weapon&&(qAttackTarget.tree||qGameState?.sandstorm)&&(<button className="btn br mt2" onClick={async()=>{const finalTree=qGameState?.sandstorm?Q_TREES[Math.floor(Math.random()*Q_TREES.length)]:qAttackTarget.tree;await update(ref(db,`qrooms/${qRoom}/game`),{currentAttack:{attackerId:qGroupId,attackerName:qMyGroup?.name,targetId:qAttackTarget.group,targetName:qAttackTarget.groupName,tree:finalTree,weapon:qAttackTarget.weapon,weaponName:qAttackTarget.weaponName,time:Date.now()}});setQAttackTarget({group:'',tree:'',weapon:''});notify('⚔️ هجوم','gold');}}>⚔️ هاجم</button>)}</div>}{isLeader&&!qCurrentAttack&&qGameState?.turnGroup!==qGroupId&&!qReveal&&(<div className="card" style={{textAlign:'center',padding:14}}><div style={{fontSize:36}}>⏳</div><div style={{fontSize:14,color:'var(--muted)',marginTop:6}}>ليس دورك — انتظر</div></div>)}<div className="card"><div className="ctitle">📋 سجل مجموعتي</div>{myAtks.length===0?<div style={{textAlign:'center',color:'var(--muted)',fontSize:12,padding:8}}>لا أحداث</div>:myAtks.slice(0,15).map((a,i)=>(<div key={i} className="feed-item" style={{borderColor:a.attackerId===qGroupId?(a.result==='success'?'var(--green)':'var(--red)'):'var(--red)'}}>{a.attackerId===qGroupId?`${a.result==='success'?'🎯':'❌'} هاجمت ${a.targetName} / ${a.tree} — ${a.result==='success'?`اصطدت ${a.hunted}`:'فشل'}`:`🛡️ هاجمتكم ${a.attackerName} وخسرتم ${a.hunted} قميري`}</div>))}</div></div>);}
 
     if(gameScreen==='qumairi_results'){const sorted=[...qGList].sort((a,b)=>(b.totalRemaining||0)-(a.totalRemaining||0));return(<div className="scr"><div style={{textAlign:'center',padding:'16px 0'}}><div style={{fontSize:60,animation:'bnc 1s infinite'}}>🏆</div><div className="ptitle" style={{fontSize:24}}>نتائج صيد القميري</div></div><div className="sg sg3" style={{marginBottom:12}}><div className="sbox"><div className="snum">{sorted.length}</div><div className="slbl">مجموعات</div></div><div className="sbox"><div className="snum" style={{color:'var(--red)'}}>{Object.values(qAttacks||{}).filter(a=>a.result==='success').reduce((s,a)=>s+(a.hunted||0),0)}</div><div className="slbl">قميري صيدت</div></div><div className="sbox"><div className="snum" style={{color:'var(--green)'}}>{Object.keys(qAttacks||{}).length}</div><div className="slbl">هجمات</div></div></div>{[...sorted].reverse().map((g,i)=>{const rank=sorted.length-i;const isWinner=rank===1;return(<div key={g.id} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',background:isWinner?'linear-gradient(135deg,rgba(240,192,64,.2),rgba(255,140,0,.1))':'#09091e',border:isWinner?'2px solid var(--gold)':'1px solid rgba(255,255,255,.05)',borderRadius:14,marginBottom:8}}><div style={{fontFamily:'Cairo',fontSize:isWinner?28:20,fontWeight:900,width:34,color:isWinner?'var(--gold)':'var(--muted)'}}>{isWinner?'👑':rank}</div><div style={{flex:1}}><div style={{fontWeight:900,fontSize:isWinner?16:14}}>{g.name}</div></div><div style={{fontFamily:'Cairo',fontSize:isWinner?28:20,fontWeight:900,color:isWinner?'var(--gold)':'var(--text)'}}>{g.totalRemaining||0}</div></div>);})}<button className="btn bgh mt3" onClick={()=>{setGameScreen('home');setSelectedGame(null);setQRoom('');setQRole(null);setQGroupId(null);localStorage.removeItem('ng_qumairi');}}>🏟️ ساحة الألعاب</button></div>);}
 
