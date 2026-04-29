@@ -1434,7 +1434,8 @@ export default function App() {
       // إخفاء لقبك من اللوحة (مثل إخفاء اسمك من القائمة)
       const myPlayerNicks = playersList.find(p=>p.nick===myNickLocal||p.nick2===myNickLocal);
       const myNicksList = myPlayerNicks ? [myPlayerNicks.nick, myPlayerNicks.nick2].filter(Boolean) : [];
-      const displayNicks = [...new Set([...activeNicks, ...inactiveNicks])].filter(n=>!myNicksList.includes(n));
+      const displayNicks = [...new Set([...activeNicks, ...inactiveNicks])];
+      const visibleNicks = displayNicks.filter(n=>!myNicksList.includes(n));
       // قائمة الأسماء — تخفي اسم اللاعب نفسه وأسماء الخارجين بالخمول
       const myPlayerId = myId || playersList.find(p=>p.nick===myNickLocal||p.nick2===myNickLocal)?.id;
       // قائمة الأسماء: أخفِ نفسك فقط — الخامل يبقى مخفياً (اسمه ليس في القائمة)
