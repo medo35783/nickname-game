@@ -419,6 +419,7 @@ export default function App() {
   const [myGuess, setMyGuess]    = useState(null);
   const [mySubmitted, setMySubmitted] = useState(false);
   const [proxyFor, setProxyFor]  = useState(null);    // player id admin attacks for
+  const [isProxyMode, setIsProxyMode] = useState(false); // وضع الإنابة الكامل (يُخفي الأسماء في الإحصائيات)
 
   /* ── UI ── */
   const [notifs, setNotifs]      = useState([]);
@@ -932,17 +933,21 @@ export default function App() {
     });
     if(Object.keys(banCleanup).length>0) await update(ref(db), banCleanup);
 
-    await update(gameRef(roomCode), {
+    const updates = {
       phase:'attacking',
       roundNum: rn,
       deadline: dl,
       roundOrder: { nicks:allNicks, names:allNames },
-      silentActive: false,
-      attacksPerRound: activeSpecialRound,
-    });
-    setSpecialRound(1);
-    // امسح خيارات الجولة السابقة
-    await update(gameRef(roomCode),{specialRound:1,poisonNick:null});
+      attacksPerRound: activeSpecialRound, // عدد الهجمات الحقيقي
+      specialRound: 1, // إعادة للوضع الافتراضي
+      poisonNick: null
+    };
+    // لا تُعيد silentActive إذا كان مُفعّلاً بالفعل
+    if (!isSilentActive) {
+      updates.silentActive = false;
+    }
+    await update(gameRef(roomCode), updates);
+    setSpecialRound(1); // إعادة local state
     notify(`🔔 الجولة ${rn} بدأت!`, 'gold');
   };
 
@@ -1572,19 +1577,23 @@ export default function App() {
       // لوحة الألقاب — كل الألقاب النشطة + ألقاب الخارجين بالخمول (بدون تمييز)
       const inactiveNicks = playersList.filter(p=>p.status==='inactive').flatMap(p=>[p.nick,p.nick2].filter(Boolean));
       const activeNicks = roundOrder.nicks?.length>0 ? roundOrder.nicks : playersList.filter(p=>p.status==='active').flatMap(p=>[p.nick,p.nick2].filter(Boolean));
-      // إخفاء لقبك من اللوحة (مثل إخفاء اسمك من القائمة)
-      const myPlayerNicks = playersList.find(p=>p.nick===myNickLocal||p.nick2===myNickLocal);
-      const myNicksList = myPlayerNicks ? [myPlayerNicks.nick, myPlayerNicks.nick2].filter(Boolean) : [];
+      
+      // إخفاء لقبك من اللوحة (أو لقب الشخص المنوب عنه في حالة الإنابة)
+      const proxyPlayer  = proxyFor ? playersList.find(p=>p.id===proxyFor) : null;
+      const effectivePlayer = proxyPlayer || playersList.find(p=>p.nick===myNickLocal||p.nick2===myNickLocal);
+      const myNicksList = effectivePlayer ? [effectivePlayer.nick, effectivePlayer.nick2].filter(Boolean) : [];
+      
       const displayNicks = [...new Set([...activeNicks, ...inactiveNicks])];
       const visibleNicks = displayNicks.filter(n=>!myNicksList.includes(n));
-      // قائمة الأسماء — تخفي اسم اللاعب نفسه وأسماء الخارجين بالخمول
-      const myPlayerId = myId || playersList.find(p=>p.nick===myNickLocal||p.nick2===myNickLocal)?.id;
+      
+      // قائمة الأسماء — تخفي اسم اللاعب نفسه (أو المنوب عنه) وأسماء الخارجين بالخمول
+      const myPlayerId = proxyPlayer?.id || myId || playersList.find(p=>p.nick===myNickLocal||p.nick2===myNickLocal)?.id;
+      
       // قائمة الأسماء: أخفِ نفسك فقط — الخامل يبقى مخفياً (اسمه ليس في القائمة)
       const displayNames = (roundOrder.names?.length>0
         ? roundOrder.names.map(id=>playersList.find(p=>p.id===id)).filter(Boolean)
         : playersList.filter(p=>p.status==='active')
       ).filter(p=> p.id !== myPlayerId);
-      const proxyPlayer  = proxyFor ? playersList.find(p=>p.id===proxyFor) : null;
 
       return(
         <div className="scr">
@@ -1602,13 +1611,20 @@ export default function App() {
                 <button className="btn bgh bxs" style={{padding:'3px 8px'}} onClick={()=>setGameScreen('stats')}>📊</button>
               </div>
             </div>
-            {/* Player's own info */}
-            {role==='player'&&myNickLocal&&(
+            {/* Player's own info - مخفي عند الهجوم بالإنابة */}
+            {role==='player'&&myNickLocal&&!proxyFor&&(
               <div style={{display:'flex',alignItems:'center',gap:6,paddingTop:5,borderTop:'1px solid rgba(255,255,255,.05)',marginTop:4}}>
                 <span style={{fontSize:10,color:'var(--muted)'}}>أنت:</span>
                 <span style={{fontSize:12,fontWeight:700,color:'var(--text)'}}>{joinName}</span>
                 <span style={{fontSize:10,color:'var(--muted)'}}>·</span>
                 <span style={{fontSize:11,color:'var(--gold)',fontWeight:700}}>"{myNickLocal}"</span>
+              </div>
+            )}
+            {/* رسالة للمشرف أثناء الهجوم بالإنابة */}
+            {role==='admin'&&proxyFor&&(
+              <div style={{display:'flex',alignItems:'center',gap:6,paddingTop:5,borderTop:'1px solid rgba(255,255,255,.05)',marginTop:4}}>
+                <span style={{fontSize:10,color:'var(--purple)'}}>⚡ تهاجم بالإنابة عن:</span>
+                <span style={{fontSize:12,fontWeight:700,color:'var(--gold)'}}>{proxyPlayer?.name}</span>
               </div>
             )}
           </div>
@@ -1659,7 +1675,10 @@ export default function App() {
             {role==='admin'&&<div style={{display:'flex',gap:4}}>
               <button className="btn bgh bxs" onClick={()=>extendTime(30*60*1000)}>+30د</button>
               <button className="btn br bxs" onClick={doReveal}>كشف</button>
-              <button className="btn bgh bxs" onClick={()=>setGameScreen('admin_live')}>👑</button>
+              <button className="btn bgh bxs" onClick={()=>{
+                setIsProxyMode(false); // إلغاء وضع الإنابة عند العودة للتحكم
+                setGameScreen('admin_live');
+              }}>👑</button>
             </div>}
           </div>
 
@@ -1681,7 +1700,12 @@ export default function App() {
           {proxyPlayer&&<div className="ann ag" style={{marginBottom:10}}>
             <div style={{fontSize:12,color:'var(--muted)'}}>🎮 المشرف يهاجم نيابةً عن</div>
             <div style={{fontSize:16,fontWeight:700,color:'var(--gold)'}}>{proxyPlayer.name} — {proxyPlayer.nick}</div>
-            <button className="btn bgh bsm" style={{width:'auto',margin:'8px auto 0'}} onClick={()=>{setProxyFor(null);setMyNick(null);setMyGuess(null);}}>إلغاء</button>
+            <button className="btn bgh bsm" style={{width:'auto',margin:'8px auto 0'}} onClick={()=>{
+              setProxyFor(null);
+              setIsProxyMode(false); // إلغاء وضع المتسابق
+              setMyNick(null);
+              setMyGuess(null);
+            }}>إلغاء</button>
           </div>}
 
           {/* SUBMITTED */}
@@ -1920,7 +1944,14 @@ export default function App() {
                   </div>
                 </div>
                 <div style={{display:'flex',gap:3}}>
-                  {!allDone&&!isBanned&&<button className="btn bb bxs" onClick={()=>{setProxyFor(p.id);setMyNick(null);setMyGuess(null);setMySubmitted(false);setGameScreen('attack');}}>🎮</button>}
+                  {!allDone&&!isBanned&&<button className="btn bb bxs" onClick={()=>{
+                    setProxyFor(p.id);
+                    setIsProxyMode(true); // تفعيل وضع المتسابق الكامل
+                    setMyNick(null);
+                    setMyGuess(null);
+                    setMySubmitted(false);
+                    setGameScreen('attack');
+                  }}>🎮</button>}
                   <button className="btn br bxs" onClick={()=>elimCheat(p.id)}>غش</button>
                 </div>
               </div>
@@ -1970,6 +2001,27 @@ export default function App() {
         <div className="scr">
           <div className="ptitle">🔓 كُشفت النتائج!</div>
           <div className="psub">الجولة {roundNum} — للجميع</div>
+
+          {/* إعلان الجولة الصامتة السابقة */}
+          {silentRoundData && (
+            <div style={{
+              background:'linear-gradient(135deg, rgba(155,89,182,.15), rgba(79,163,224,.1))',
+              border:'2px solid rgba(155,89,182,.5)',
+              borderRadius:12,
+              padding:'14px',
+              marginBottom:12,
+              textAlign:'center',
+              animation:'fi .5s ease'
+            }}>
+              <div style={{fontSize:28,marginBottom:6}}>🤫</div>
+              <div style={{fontSize:15,fontWeight:900,color:'var(--purple)',marginBottom:4}}>
+                كشف نتائج الجولة الصامتة رقم {silentRoundNum}!
+              </div>
+              <div style={{fontSize:12,color:'var(--text)',opacity:.9}}>
+                النتائج المخفية ستظهر أدناه مع نتائج هذه الجولة
+              </div>
+            </div>
+          )}
 
           {/* أرقام الجولة فقط */}
           <div className="sg sg3">
@@ -2074,10 +2126,12 @@ export default function App() {
       const myAccuracy = myAtks.length>0?Math.round(myHits.length/myAtks.length*100):0;
       const myRank = attackerRank.findIndex(p=>p.nick===myNickLocal)+1;
 
-      // تبويبات حسب الدور
-      const tabs = role==='admin'
+      // تبويبات حسب الدور (أو وضع الإنابة)
+      // لو المشرف في وضع الإنابة = يشوف تبويبات المتسابق
+      const effectiveRole = (role === 'admin' && isProxyMode) ? 'player' : role;
+      const tabs = effectiveRole ==='admin'
         ? [['nicks','🎭 الألقاب'],['names','👥 الأسماء'],['fierce','⚔️ الأشرس'],['poison','☠️ المسموم'],['remaining','المتبقون'],['log','📜 مسار اللعبة']]
-        : [['nicks','🎭 الألقاب'],['names','👥 الأسماء'],['me','👤 أنا'],['fierce','⚔️ الأشرس'],['poison','☠️ المسموم'],['remaining','المتبقون']];
+        : [['nicks','🎭 الألقاب'],['fierce','⚔️ الأشرس'],['poison','☠️ المسموم'],['me','👤 أنا'],['remaining','المتبقون']];
 
       const HeatBar=({items,maxVal,showLabel=true})=>(
         <>{items.map(([label,count],i)=>(
@@ -2219,7 +2273,7 @@ export default function App() {
           {/* ══ الأشرس هجوماً ══ */}
           {statsTab==='fierce'&&<>
             <div style={{fontSize:12,color:'var(--muted)',marginBottom:12,textAlign:'center'}}>
-              {role==='admin'?'الاسم واللقب — للمشرف فقط':'الألقاب فقط — بدون كشف الأسماء'}
+              {effectiveRole==='admin'?'الاسم واللقب — للمشرف فقط':'الألقاب فقط — بدون كشف الأسماء'}
             </div>
             {attackerRank.length===0
               ?<div style={{textAlign:'center',color:'var(--muted)',padding:18,fontSize:12}}>لا هجمات بعد</div>
@@ -2229,9 +2283,10 @@ export default function App() {
                   {i===0?'👑':i===1?'🥈':i===2?'🥉':i+1}
                 </div>
                 {/* المشرف يرى الأفاتار والاسم واللقب، المتسابق يرى اللقب فقط بدون أفاتار */}
-                {role==='admin'&&<Av p={p} sz={32} fs={12}/>}
+                {effectiveRole==='admin'{role==='admin'&&<Av{role==='admin'&&<Av<Av p={p} sz={32} fs={12}/>}
                 <div style={{flex:1}}>
-                  {role==='admin'
+                  
+                  {effectiveRole==='admin'
                     ?<><div style={{fontWeight:700,fontSize:13}}>{p.name}</div>
                       <div style={{fontSize:11,color:'var(--gold)'}}>"{p.nick}"</div></>
                     :<div style={{fontWeight:700,fontSize:13,color:'var(--gold)'}}>"{p.nick}"</div>
@@ -2269,7 +2324,8 @@ export default function App() {
                     <div key={p.id} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',background:'rgba(155,89,182,.08)',border:'1px solid rgba(155,89,182,.2)',borderRadius:9,marginBottom:5}}>
                       <span style={{fontSize:16}}>☠️</span>
                       <div style={{flex:1}}>
-                        {role==='admin'
+                        
+                  {effectiveRole==='admin'
                           ?<><div style={{fontWeight:700,fontSize:13}}>{p.name}</div>
                             <div style={{fontSize:11,color:'var(--gold)'}}>"{p.nick}"</div></>
                           :<div style={{fontWeight:700,fontSize:13,color:'var(--gold)'}}>"{p.nick}"</div>
@@ -2298,7 +2354,8 @@ export default function App() {
                   </div>
                   {poisoned.map(p=>(
                     <div key={p.id} style={{padding:'10px 12px',marginBottom:5,background:'rgba(155,89,182,.08)',border:'1px solid rgba(155,89,182,.2)',borderRadius:9}}>
-                      {role==='admin'
+                      
+                  {effectiveRole==='admin'
                         ?<div><span style={{fontWeight:700}}>{p.name}</span> — <span style={{color:'var(--gold)'}}>"{p.nick}"</span><span style={{fontSize:11,color:'var(--muted)',marginRight:8}}> ممنوع الجولة {p.isBannedNextRound}</span></div>
                         :<div><span style={{color:'var(--gold)',fontWeight:700}}>"{p.nick}"</span><span style={{fontSize:11,color:'var(--muted)',marginRight:8}}> — ممنوع من الهجوم</span></div>
                       }
