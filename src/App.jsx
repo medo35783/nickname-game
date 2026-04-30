@@ -181,6 +181,15 @@ textarea.inp{resize:vertical;min-height:80px}
 .sugg-text{font-size:13px;line-height:1.6}
 .sugg-date{font-size:10px;color:var(--muted);margin-top:5px}
 .online-dot{width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block;margin-left:5px;animation:pls 2s infinite}
+/* ── ONBOARDING SCREEN ── */
+.onb-bg{position:fixed;inset:0;z-index:250;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeInFull .3s ease}
+.onb-card{background:var(--card);border:2px solid var(--border);border-radius:18px;padding:26px 22px;max-width:420px;width:100%;text-align:center}
+.onb-icon{font-size:56px;margin-bottom:12px}
+.onb-title{font-family:'Cairo',sans-serif;font-size:22px;font-weight:900;color:var(--gold);margin-bottom:8px}
+.onb-sub{color:var(--muted);font-size:13px;line-height:1.8;margin-bottom:20px}
+.onb-step{background:rgba(240,192,64,.06);border:1px solid rgba(240,192,64,.15);border-radius:10px;padding:12px;margin-bottom:8px;text-align:right}
+.onb-step-num{display:inline-block;width:24px;height:24px;border-radius:50%;background:var(--gold);color:#07070f;font-size:12px;font-weight:900;line-height:24px;text-align:center;margin-left:8px}
+.onb-step-text{font-size:13px;color:var(--text);line-height:1.6}
 /* ── PRINT ── */
 @media print{
   .bnav,.hdr,.btn,.notif{display:none!important}
@@ -294,6 +303,78 @@ const attacksRef = code => ref(db, `rooms/${code}/currentRound/attacks`);
 const gameRef  = code => ref(db, `rooms/${code}/game`);
 
 /* ══════════════════════════════════════════════════
+   COMPONENTS - شاشات مساعدة
+══════════════════════════════════════════════════ */
+
+// شاشة الترحيب (Onboarding)
+function OnboardingScreen({ role, onDismiss }) {
+  const steps = role === 'admin' ? [
+    { icon: '👥', text: 'أضف المتسابقين أو دعهم ينضمون برمز الغرفة' },
+    { icon: '⏱️', text: 'حدد وقت الجولة وفعّل الخيارات الخاصة' },
+    { icon: '🔓', text: 'اكشف النتائج واعلن الفائز بنهاية المسابقة' }
+  ] : [
+    { icon: '🎭', text: 'اختر لقباً سرياً لا يمت بصلة لاهتماماتك' },
+    { icon: '⚔️', text: 'هاجم الألقاب وخمّن أصحابها قبل أن يكشفوك' },
+    { icon: '🏆', text: 'آخر لاعب باقٍ = الفائز!' }
+  ];
+
+  return (
+    <div className="onb-bg">
+      <div className="onb-card">
+        <div className="onb-icon">{role === 'admin' ? '👑' : '🎮'}</div>
+        <div className="onb-title">{role === 'admin' ? 'دليل المشرف' : 'دليل المتسابق'}</div>
+        <div className="onb-sub">
+          {role === 'admin' 
+            ? 'أنت المدير الكامل للمسابقة — تحكم بكل شيء!' 
+            : 'استعد للمنافسة — أخفِ هويتك واكشف الآخرين!'}
+        </div>
+        {steps.map((step, i) => (
+          <div key={i} className="onb-step">
+            <span className="onb-step-num">{i + 1}</span>
+            <span className="onb-step-text">{step.icon} {step.text}</span>
+          </div>
+        ))}
+        <button className="btn bg mt3" onClick={onDismiss}>
+          ✅ فهمت، لنبدأ!
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// إحصائيات "أنا" للمتسابق
+function MyStatsCard({ myNickLocal, allAttacksFlat }) {
+  const myAttacks = allAttacksFlat.filter(a => a.attackerNick === myNickLocal);
+  const hits = myAttacks.filter(a => a.correct).length;
+  const misses = myAttacks.filter(a => !a.correct).length;
+  const accuracy = myAttacks.length > 0 ? Math.round((hits / myAttacks.length) * 100) : 0;
+
+  return (
+    <div className="card">
+      <div className="ctitle">📊 إحصائياتي</div>
+      <div className="sg sg4">
+        <div className="sbox">
+          <div className="snum">{myAttacks.length}</div>
+          <div className="slbl">هجماتي</div>
+        </div>
+        <div className="sbox">
+          <div className="snum" style={{color:'var(--green)'}}>{hits}</div>
+          <div className="slbl">إصابات</div>
+        </div>
+        <div className="sbox">
+          <div className="snum" style={{color:'var(--red)'}}>{misses}</div>
+          <div className="slbl">أخطاء</div>
+        </div>
+        <div className="sbox">
+          <div className="snum" style={{color:'var(--gold)'}}>{accuracy}%</div>
+          <div className="slbl">دقة</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════
    MAIN APP
 ══════════════════════════════════════════════════ */
 export default function App() {
@@ -302,6 +383,7 @@ export default function App() {
   const [selectedGame, setSelectedGame] = useState(null); // null=الرئيسية، 'nicknames'، 'qumairi'
   const [gameScreen, setGameScreen] = useState('home');
   const [showTutorial, setShowTutorial] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(null); // 'admin' | 'player' | null
   const [isLoading, setIsLoading]   = useState(true);  // splash screen on startup
 
   /* ── SESSION ── */
@@ -366,6 +448,12 @@ export default function App() {
   const [qCustomTimer, setQCustomTimer] = useState('');
   const [qCountdown, setQCountdown] = useState(null); // عداد القميري الحقيقي
   const [qTurnOverlay, setQTurnOverlay] = useState(null); // {groupName, weapon}
+  const [qShieldTree, setQShieldTree] = useState(null); // رقم الشجرة المحمية (0-10)
+  const [qPoisonTree, setQPoisonTree] = useState(null); // رقم الشجرة المسمومة
+  const [qSandstorm, setQSandstorm] = useState(false); // العاصفة الرملية
+  const [qFastestMode, setQFastestMode] = useState(false); // خيار الأسرع
+  const [qQuestion, setQQuestion] = useState(''); // سؤال المشرف
+  const [qCorrectAnswer, setQCorrectAnswer] = useState(true); // الإجابة الصحيحة
 
   const Q_TREES = ['العرعر','سدرة','برسوبس','طلحة','كينة','أثلة','سمر','العوسج','غضاة','رمثة','الغاف'];
   const Q_WEAPONS = [
@@ -644,6 +732,14 @@ export default function App() {
   const notify=(text,type='info')=>{const id=Date.now()+Math.random();setNotifs(p=>[...p,{id,text,type}]);setTimeout(()=>setNotifs(p=>p.filter(n=>n.id!==id)),3200);};
   const totalMs=()=>Math.max((Number(attackDur.h)*3600+Number(attackDur.m)*60+Number(attackDur.s))*1000,5*60*1000);
   const cdInfo=()=>{if(countdown===null)return{label:'—',urgent:false};if(countdown<=0)return{label:'انتهى الوقت!',urgent:true};return{label:fmtMs(countdown),urgent:countdown<5*60*1000};};
+  
+  // دالة تطبيع اللقب (منع التشابه: هاء/تاء مربوطة، همزة/ألف، ياء/ألف مقصورة)
+  const normalizeName = (str) => {
+    return str.trim().toLowerCase()
+      .replace(/ة$/g, 'ه')      // تاء مربوطة → هاء
+      .replace(/أ|إ|آ/g, 'ا')   // همزة → ألف عادي
+      .replace(/ى/g, 'ي');      // ألف مقصورة → ياء
+  };
 
   /* ══ ADMIN: CREATE ROOM ══ */
   const createRoom = async () => {
@@ -668,10 +764,12 @@ export default function App() {
     const {name, nick, nick2} = form;
     if(!name.trim()||!nick.trim()){notify('أدخل الاسم واللقب','error');return;}
     if(nickMode===2&&!nick2.trim()){notify('أدخل اللقب الثاني','error');return;}
-    const allNicks = playersList.flatMap(p=>[p.nick,p.nick2].filter(Boolean)).map(n=>n?.trim().toLowerCase());
-    if(allNicks.includes(nick.trim().toLowerCase())){notify(`⚠️ اللقب "${nick.trim()}" مأخوذ — اختر لقباً آخر`,'error');return;}
-    if(nickMode===2&&allNicks.includes(nick2.trim().toLowerCase())){notify(`⚠️ اللقب "${nick2.trim()}" مأخوذ — اختر لقباً آخر`,'error');return;}
-    if(nickMode===2&&nick.trim().toLowerCase()===nick2.trim().toLowerCase()){notify('اللقبان متطابقان — يجب أن يختلفا','error');return;}
+    // استخدام تطبيع اللقب لمنع التشابه
+    const allNicks = playersList.flatMap(p=>[p.nick,p.nick2].filter(Boolean));
+    const normalizedNicks = allNicks.map(normalizeName);
+    if(normalizedNicks.includes(normalizeName(nick))){notify(`⚠️ اللقب "${nick.trim()}" سبقك أحد عليه — اختر لقباً آخر`,'error');return;}
+    if(nickMode===2&&normalizedNicks.includes(normalizeName(nick2))){notify(`⚠️ اللقب "${nick2.trim()}" سبقك أحد عليه — اختر لقباً آخر`,'error');return;}
+    if(nickMode===2&&normalizeName(nick)===normalizeName(nick2)){notify('اللقبان متطابقان — يجب أن يختلفا','error');return;}
     const newRef = push(playersRef(roomCode));
     await set(newRef, {
       name:name.trim(), nick:nick.trim(),
@@ -727,15 +825,15 @@ export default function App() {
         setJoinErr('اللعبة بدأت — لا يمكن الانضمام لأول مرة');
         return;
       }
-      // check nick not taken
+      // check nick not taken — استخدام تطبيع اللقب
       const existingNicks = existingPlayers.flatMap(([,p])=>[p.nick,p.nick2].filter(Boolean));
-      const existingNicksLower = existingNicks.map(n=>n?.trim().toLowerCase());
-      if(existingNicksLower.includes(joinNick.trim().toLowerCase())){setJoinErr(`⚠️ اللقب "${joinNick.trim()}" مأخوذ — اختر لقباً مختلفاً`);return;}
+      const normalizedExisting = existingNicks.map(normalizeName);
+      if(normalizedExisting.includes(normalizeName(joinNick))){setJoinErr(`⚠️ اللقب "${joinNick.trim()}" سبقك أحد عليه — اختر لقباً مختلفاً`);return;}
       // Validate nick2 if nickMode=2
       if(roomNickMode===2){
         if(!joinNick2.trim()){setJoinErr('أدخل لقبك الثاني');setJoinLoading(false);return;}
-        if(existingNicks.includes(joinNick2.trim())){setJoinErr('اللقب الثاني مأخوذ — اختر لقباً آخر');setJoinLoading(false);return;}
-        if(joinNick.trim()===joinNick2.trim()){setJoinErr('اللقبان يجب أن يختلفا');setJoinLoading(false);return;}
+        if(normalizedExisting.includes(normalizeName(joinNick2))){setJoinErr('اللقب الثاني سبقك أحد عليه — اختر لقباً آخر');setJoinLoading(false);return;}
+        if(normalizeName(joinNick)===normalizeName(joinNick2)){setJoinErr('اللقبان يجب أن يختلفا');setJoinLoading(false);return;}
       }
       const newRef = push(playersRef(joinInput));
       await set(newRef, {
@@ -1149,6 +1247,37 @@ export default function App() {
     notify(`🚫 أُخرج ${p?.name}`, 'error');
   };
 
+  /* ══ DOWNLOAD PDF REPORT ══ */
+  const downloadPDFReport = () => {
+    const report = {
+      gameType: 'لعبة الألقاب',
+      roomCode,
+      timestamp: new Date().toLocaleString('ar-SA'),
+      players: playersList.map(p => ({
+        name: p.name,
+        nick: p.nick,
+        nick2: p.nick2,
+        status: p.status,
+        eliminatedBy: p.eliminatedBy,
+        eliminatedRound: p.eliminatedRound
+      })),
+      rounds: allRoundsList.map(r => ({
+        round: r.round,
+        attacks: Object.values(r.attacks||{}).length
+      })),
+      winner: activePlayers[0]?.name || 'لا يوجد'
+    };
+
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `تقرير_${roomCode}_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    notify('✅ تم تحميل التقرير', 'success');
+  };
+
   /* ══ STATS ══ */
   const nickHeatmap=()=>{const c={};allAttacksFlat.forEach(a=>{if(a.targetNick)c[a.targetNick]=(c[a.targetNick]||0)+1;});return Object.entries(c).sort((a,b)=>b[1]-a[1]);};
   const nameHeatmap=()=>{const c={};allAttacksFlat.forEach(a=>{if(a.guessedName)c[a.guessedName]=(c[a.guessedName]||0)+1;});return Object.entries(c).sort((a,b)=>b[1]-a[1]);};
@@ -1179,6 +1308,18 @@ export default function App() {
 
   const renderGame = () => {
 
+    /* ── ONBOARDING SCREEN ── */
+    if(showOnboarding) {
+      return <OnboardingScreen 
+        role={showOnboarding} 
+        onDismiss={() => {
+          setShowOnboarding(null);
+          if(showOnboarding === 'admin') createRoom();
+          else setGameScreen('join');
+        }}
+      />;
+    }
+
     /* ── HOME ── */
     if(gameScreen==='home'){
       // لو لعبة مختارة → ادخل عليها
@@ -1191,8 +1332,8 @@ export default function App() {
             <div className="psub">أخفِ هويتك • الكل يهاجم معاً • اكشف الهويات</div>
           </div>
           <div style={{display:'flex',flexDirection:'column',gap:8}}>
-            <button className="btn bg" onClick={createRoom}>👑 إنشاء غرفة كمسؤول</button>
-            <button className="btn bo" onClick={()=>setGameScreen('join')}>🎮 انضمام كلاعب برمز الغرفة</button>
+            <button className="btn bg" onClick={()=>setShowOnboarding('admin')}>👑 إنشاء غرفة كمسؤول</button>
+            <button className="btn bo" onClick={()=>setShowOnboarding('player')}>🎮 انضمام كلاعب برمز الغرفة</button>
           </div>
           <button className="btn bgh" style={{marginTop:4}} onClick={()=>setModal({type:'guide'})}>
             📖 كيف تلعب؟ — دليل للمشرف والمتسابق
@@ -1875,6 +2016,9 @@ export default function App() {
             ✅ لم يُكشف أحد هذه الجولة
           </div>}
 
+          {/* إحصائيات "أنا" للمتسابق */}
+          {role==='player' && myNickLocal && <MyStatsCard myNickLocal={myNickLocal} allAttacksFlat={allAttacksFlat} />}
+
           {/* ضحايا اللقب المسموم */}
           {(()=>{
             const poisoned=playersList.filter(p=>p.isBannedNextRound&&p.isBannedNextRound>roundNum-1);
@@ -2279,7 +2423,7 @@ export default function App() {
           </div>
 
           <button className="btn bgh mt2" onClick={()=>setGameScreen('stats')}>📊 الإحصائيات الكاملة</button>
-          {role==='admin'&&<button className="btn bgh mt2" onClick={exportPDF}>📄 تحميل التقرير</button>}
+          {role==='admin'&&<button className="btn bg mt2" onClick={downloadPDFReport}>📄 تحميل التقرير</button>}
         </div>
       );
     }
